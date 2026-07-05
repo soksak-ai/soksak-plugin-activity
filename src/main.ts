@@ -119,11 +119,13 @@ export default {
       for (const fn of viewListeners) fn();
     };
 
-    // 낭독 — 스펙 준수 + 읽음 커서 + 활성 창: tts 문장이 있고 커서를 전진시킨 엔트리만 say.
+    // 낭독 — 스펙 준수 + 읽음 커서 + 단일 낭독자: tts 문장이 있고 커서를 전진시킨 엔트리만 say.
     // (커서 이하 = 이미 읽음(이 창/다른 창/이전 세션) — 침묵. 몰아읽기·중복 낭독 원천 차단.)
-    const narrate = (e: ActivityEntry, own = false) => {
-      // 낭독 자격: 낭독자(마지막 활성 창) 또는 타겟된 창(이 창에서 발생한 엔트리).
-      if (!vtubeOn() || !cursorReady || !(isNarrator || own)) return;
+    // 목소리는 항상 하나 — narrator 만 읽는다. 과거의 "발생 창 병행 낭독권"은 크로스창 턴
+    // (오케스트레이터)에서 narrator 와 발생 창이 동시 발화하는 레이스를 만들어 폐지(실측).
+    // 활성창 규칙은 포커스 시 narrator 클레임이 담당한다(작업 창 = 낭독 창).
+    const narrate = (e: ActivityEntry) => {
+      if (!vtubeOn() || !cursorReady || !isNarrator) return;
       const text = ttsOf(e, ko);
       if (!text) return;
       if (!advanceCursor(e.seq)) return;
@@ -167,9 +169,9 @@ export default {
         else isNarrator = v === myId;
       });
 
-    const ingest = (e: ActivityEntry, live: boolean, own = false) => {
+    const ingest = (e: ActivityEntry, live: boolean) => {
       if (!insertEntry(buf, e)) return;
-      if (live) narrate(e, own); // 백필은 과거 — 낭독하지 않는다(라이브만). 자격 없으면 안 읽음 적립
+      if (live) narrate(e); // 백필은 과거 — 낭독하지 않는다(라이브만). 자격 없으면 안 읽음 적립
       notify();
     };
 
@@ -177,7 +179,8 @@ export default {
     ctx.subscriptions.push(
       app.events.on("activity", (e: ActivityEntry & { ownWindow?: boolean }) => {
         const { ownWindow, ...entry } = e;
-        ingest(entry as ActivityEntry, true, ownWindow === true);
+        void ownWindow; // 낭독권 아님(단일 낭독자) — 창-스코프 표시 필터용 필드만 소비
+        ingest(entry as ActivityEntry, true);
       }),
     );
 
@@ -231,6 +234,8 @@ export default {
 .al-row.k-chat-answer .al-text { color:#ffd9a8; }
 /* 대화 세트 구성원(parentId) — flat 로그의 들여쓰기 마커(오케스트레이터 카드와 같은 묶음). */
 .al-row.set { padding-left:14px; border-left:2px solid rgba(255,207,92,.35); }
+/* 시스템 유래(§5 — 스케줄러·부팅 부산물) — 기록은 보이되 흐림. */
+.al-row.sys { opacity:.38; }
 .al-row.spoken .al-time::after { content:"🔊"; margin-left:2px; }
 .al-row.unread .al-text { color:#ffe9a8; }
 .al-row.unread .al-time::before { content:"●"; color:#ffcf5c; margin-right:3px; }
@@ -270,7 +275,7 @@ export default {
             viewCtx.setBadge?.(unreadSet.size > 0 ? unreadSet.size : null);
             for (const e of buf) {
               const row = document.createElement("div");
-              row.className = `al-row k-${e.kind.split(".").join("-")}${narrated.has(e.seq) ? " spoken" : ""}${unreadSet.has(e.seq) ? " unread" : ""}${isSetMember(e) ? " set" : ""}`;
+              row.className = `al-row k-${e.kind.split(".").join("-")}${narrated.has(e.seq) ? " spoken" : ""}${unreadSet.has(e.seq) ? " unread" : ""}${isSetMember(e) ? " set" : ""}${typeof e.payload.origin === "string" && e.payload.origin ? " sys" : ""}`;
               const t = document.createElement("span");
               t.className = "al-time";
               t.textContent = new Date(e.ts).toTimeString().slice(0, 8);

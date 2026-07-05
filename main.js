@@ -115,8 +115,8 @@ var main_default = {
     const notify = () => {
       for (const fn of viewListeners) fn();
     };
-    const narrate = (e, own = false) => {
-      if (!vtubeOn() || !cursorReady || !(isNarrator || own)) return;
+    const narrate = (e) => {
+      if (!vtubeOn() || !cursorReady || !isNarrator) return;
       const text = ttsOf(e, ko);
       if (!text) return;
       if (!advanceCursor(e.seq)) return;
@@ -151,15 +151,15 @@ var main_default = {
         if (v == null) claimNarrator();
         else isNarrator = v === myId;
       });
-    const ingest = (e, live, own = false) => {
+    const ingest = (e, live) => {
       if (!insertEntry(buf, e)) return;
-      if (live) narrate(e, own);
+      if (live) narrate(e);
       notify();
     };
     ctx.subscriptions.push(
       app.events.on("activity", (e) => {
         const { ownWindow, ...entry } = e;
-        ingest(entry, true, ownWindow === true);
+        ingest(entry, true);
       })
     );
     void Promise.resolve(loadCursor).then(
@@ -204,6 +204,8 @@ var main_default = {
 .al-row.k-chat-answer .al-text { color:#ffd9a8; }
 /* \uB300\uD654 \uC138\uD2B8 \uAD6C\uC131\uC6D0(parentId) \u2014 flat \uB85C\uADF8\uC758 \uB4E4\uC5EC\uC4F0\uAE30 \uB9C8\uCEE4(\uC624\uCF00\uC2A4\uD2B8\uB808\uC774\uD130 \uCE74\uB4DC\uC640 \uAC19\uC740 \uBB36\uC74C). */
 .al-row.set { padding-left:14px; border-left:2px solid rgba(255,207,92,.35); }
+/* \uC2DC\uC2A4\uD15C \uC720\uB798(\xA75 \u2014 \uC2A4\uCF00\uC904\uB7EC\xB7\uBD80\uD305 \uBD80\uC0B0\uBB3C) \u2014 \uAE30\uB85D\uC740 \uBCF4\uC774\uB418 \uD750\uB9BC. */
+.al-row.sys { opacity:.38; }
 .al-row.spoken .al-time::after { content:"\u{1F50A}"; margin-left:2px; }
 .al-row.unread .al-text { color:#ffe9a8; }
 .al-row.unread .al-time::before { content:"\u25CF"; color:#ffcf5c; margin-right:3px; }
@@ -239,7 +241,7 @@ var main_default = {
             viewCtx.setBadge?.(unreadSet.size > 0 ? unreadSet.size : null);
             for (const e of buf) {
               const row = document.createElement("div");
-              row.className = `al-row k-${e.kind.split(".").join("-")}${narrated.has(e.seq) ? " spoken" : ""}${unreadSet.has(e.seq) ? " unread" : ""}${isSetMember(e) ? " set" : ""}`;
+              row.className = `al-row k-${e.kind.split(".").join("-")}${narrated.has(e.seq) ? " spoken" : ""}${unreadSet.has(e.seq) ? " unread" : ""}${isSetMember(e) ? " set" : ""}${typeof e.payload.origin === "string" && e.payload.origin ? " sys" : ""}`;
               const t = document.createElement("span");
               t.className = "al-time";
               t.textContent = new Date(e.ts).toTimeString().slice(0, 8);
