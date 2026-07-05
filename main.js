@@ -89,7 +89,7 @@ var main_default = {
             void app.data.kv.get(NARRATOR_KEY).then((v) => {
               const was = isNarrator;
               isNarrator = v === myId;
-              if (was && !isNarrator) void app.commands.execute(VT + "release", {}).catch(() => {
+              if (was && !isNarrator) void app.commands.execute(VT + "release", {}, { origin: "internal" }).catch(() => {
               });
             });
           } else if (key === VTUBE_KEY) {
@@ -97,7 +97,7 @@ var main_default = {
               vtube = v !== false;
               syncMascot();
               if (vtube) drainUnread();
-              else void app.commands.execute(VT + "release", {}).catch(() => {
+              else void app.commands.execute(VT + "release", {}, { origin: "internal" }).catch(() => {
               });
               notify();
             });
@@ -135,7 +135,7 @@ var main_default = {
       if (!text) return;
       if (!advanceCursor(e.seq)) return;
       narrated.add(e.seq);
-      void app.commands.execute(VT + "say", { text }).catch((err) => {
+      void app.commands.execute(VT + "say", { text }, { origin: "internal" }).catch((err) => {
         if (!vtubeWarned) {
           vtubeWarned = true;
           console.warn("[activity] vtube-tts say \uC2E4\uD328 \u2014 \uD14D\uC2A4\uD2B8 \uBAA8\uB4DC\uB85C \uACC4\uC18D:", err);
@@ -177,7 +177,7 @@ var main_default = {
       })
     );
     void Promise.resolve(loadCursor).then(
-      () => app.commands.execute("activity.recent", { limit: 100 }).then((r) => {
+      () => app.commands.execute("activity.recent", { limit: 100 }, { origin: "internal" }).then((r) => {
         const entries = r?.data?.entries ?? r?.entries ?? [];
         for (const e of entries) ingest(e, false);
         const maxSeq = entries.reduce((m, e) => Math.max(m, e.seq), -1);
@@ -191,7 +191,7 @@ var main_default = {
       })
     );
     const syncMascot = () => {
-      void app.commands.execute(VT + "mascot.toggle", { on: vtubeOn() }).catch(() => {
+      void app.commands.execute(VT + "mascot.toggle", { on: vtubeOn() }, { origin: "internal" }).catch(() => {
       });
     };
     syncMascot();

@@ -25,7 +25,8 @@ interface HostApp {
   };
   commands: {
     register(name: string, spec: Record<string, unknown> & { handler: Function }): Disposable;
-    execute(name: string, params?: Record<string, unknown>): Promise<any>;
+    // opts.origin — 자동 행위의 자기 선언(§5): 기록은 되고 노출(흐림·무낭독)만 낮아진다.
+    execute(name: string, params?: Record<string, unknown>, opts?: { origin?: string }): Promise<any>;
   };
   events: { on(event: string, fn: (payload: any) => void): Disposable };
   settings: { get(key: string): unknown; onChange(cb: (all: Record<string, unknown>) => void): Disposable };
@@ -36,6 +37,8 @@ interface HostApp {
       watch(cb: (key: string) => void): Disposable;
     };
   };
+  // fs:read 권한 — 응답 media(path 모드) 이미지 렌더용(오케스트레이터 동형).
+  fs?: { readBinary?: (path: string) => Promise<{ mime: string; base64: string }> };
 }
 interface PluginCtx {
   app: HostApp;
@@ -80,14 +83,14 @@ export default {
               isNarrator = v === myId; // 다른 창이 클레임 — 즉시 양보(단일 목소리)
               // 자격 상실 = 엔진 반납(규칙: 엔진의 생존은 발화 자격과 함께 간다 — 모델 상주
               // 프로세스가 창마다 남아 메모리를 먹던 원천). 다음 자격 창이 lazy 재기동.
-              if (was && !isNarrator) void app.commands.execute(VT + "release", {}).catch(() => {});
+              if (was && !isNarrator) void app.commands.execute(VT + "release", {}, { origin: "internal" }).catch(() => {});
             });
           } else if (key === VTUBE_KEY) {
             void app.data!.kv.get(VTUBE_KEY).then((v) => {
               vtube = v !== false;
               syncMascot();
               if (vtube) drainUnread();
-              else void app.commands.execute(VT + "release", {}).catch(() => {}); // 끔 = 자격 반납
+              else void app.commands.execute(VT + "release", {}, { origin: "internal" }).catch(() => {}); // 끔 = 자격 반납
               notify();
             });
           }
@@ -135,7 +138,7 @@ export default {
       if (!text) return;
       if (!advanceCursor(e.seq)) return;
       narrated.add(e.seq);
-      void app.commands.execute(VT + "say", { text }).catch((err) => {
+      void app.commands.execute(VT + "say", { text }, { origin: "internal" }).catch((err) => {
         if (!vtubeWarned) {
           vtubeWarned = true;
           console.warn("[activity] vtube-tts say 실패 — 텍스트 모드로 계속:", err);
@@ -192,7 +195,7 @@ export default {
     // 백필 1회 — 표시만(낭독 없음). 커서는 백필 최대 seq 까지 전진: 과거는 영원히 과거다.
     void Promise.resolve(loadCursor).then(() =>
       app.commands
-        .execute("activity.recent", { limit: 100 })
+        .execute("activity.recent", { limit: 100 }, { origin: "internal" })
         .then((r: any) => {
           const entries = (r?.data?.entries ?? r?.entries ?? []) as ActivityEntry[];
           for (const e of entries) ingest(e, false);
@@ -211,7 +214,7 @@ export default {
 
     // 마스코트 동기 — vtube 토글이 캐릭터 표시까지 소유(on=등장, off=퇴장)
     const syncMascot = () => {
-      void app.commands.execute(VT + "mascot.toggle", { on: vtubeOn() }).catch(() => {});
+      void app.commands.execute(VT + "mascot.toggle", { on: vtubeOn() }, { origin: "internal" }).catch(() => {});
     };
     syncMascot();
 
