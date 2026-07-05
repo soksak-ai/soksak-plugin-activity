@@ -84,6 +84,7 @@ export default {
               // 자격 상실 = 엔진 반납(규칙: 엔진의 생존은 발화 자격과 함께 간다 — 모델 상주
               // 프로세스가 창마다 남아 메모리를 먹던 원천). 다음 자격 창이 lazy 재기동.
               if (was && !isNarrator) void app.commands.execute(VT + "release", {}, { origin: "internal" }).catch(() => {});
+              if (was !== isNarrator) syncMascot(); // 자격 이동 = 마스코트 표시도 이동
             });
           } else if (key === MASCOT_KEY) {
             void app.data!.kv.get(MASCOT_KEY).then((v) => {
@@ -119,8 +120,10 @@ export default {
     const myId = (globalThis.crypto?.randomUUID?.() ?? String(Math.random())).slice(0, 12);
     let isNarrator = false;
     const claimNarrator = () => {
+      const was = isNarrator;
       isNarrator = true;
       void app.data?.kv.set(NARRATOR_KEY, myId).catch(() => {});
+      if (!was) syncMascot(); // 자격 획득 = 이 창에 마스코트
     };
 
     const notify = () => {
@@ -213,8 +216,11 @@ export default {
     );
 
     // 마스코트 동기 — mascot 토글이 캐릭터 표시까지 소유(on=등장, off=퇴장)
+    // 마스코트 표시 자격 = 낭독자(단일 낭독자와 동형): 낭독자 창만 그린다. 모든 창이 각자
+    // Live2D 를 상시 렌더하면 창당 CPU ~3%p(실측, rAF+매 프레임 스타일 갱신)가 배가된다 —
+    // 목소리가 하나면 얼굴도 하나. 자격 이동(narrator kv)이 표시도 함께 옮긴다.
     const syncMascot = () => {
-      void app.commands.execute(VT + "toggle", { on: mascotOn() }, { origin: "internal" }).catch(() => {});
+      void app.commands.execute(VT + "toggle", { on: mascotOn() && isNarrator }, { origin: "internal" }).catch(() => {});
     };
     syncMascot();
 

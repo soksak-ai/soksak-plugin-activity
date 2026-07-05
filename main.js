@@ -106,6 +106,7 @@ var main_default = {
               isNarrator = v === myId;
               if (was && !isNarrator) void app.commands.execute(VT + "release", {}, { origin: "internal" }).catch(() => {
               });
+              if (was !== isNarrator) syncMascot();
             });
           } else if (key === MASCOT_KEY) {
             void app.data.kv.get(MASCOT_KEY).then((v) => {
@@ -137,9 +138,11 @@ var main_default = {
     const myId = (globalThis.crypto?.randomUUID?.() ?? String(Math.random())).slice(0, 12);
     let isNarrator = false;
     const claimNarrator = () => {
+      const was = isNarrator;
       isNarrator = true;
       void app.data?.kv.set(NARRATOR_KEY, myId).catch(() => {
       });
+      if (!was) syncMascot();
     };
     const notify = () => {
       for (const fn of viewListeners) fn();
@@ -206,7 +209,7 @@ var main_default = {
       })
     );
     const syncMascot = () => {
-      void app.commands.execute(VT + "toggle", { on: mascotOn() }, { origin: "internal" }).catch(() => {
+      void app.commands.execute(VT + "toggle", { on: mascotOn() && isNarrator }, { origin: "internal" }).catch(() => {
       });
     };
     syncMascot();
