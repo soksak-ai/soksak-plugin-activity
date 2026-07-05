@@ -155,7 +155,10 @@ var main_default = {
       if (!was) syncMascot();
     };
     const notify = () => {
-      for (const fn of viewListeners) fn();
+      for (const l of viewListeners) l.refresh();
+    };
+    const notifyAppend = (e) => {
+      for (const l of viewListeners) l.append(e);
     };
     const narrate = (e) => {
       if (!mascotOn() || !cursorReady || !isNarrator) return;
@@ -205,7 +208,8 @@ var main_default = {
     const ingest = (e, live) => {
       if (!insertEntry(buf, e)) return;
       if (live) narrate(e);
-      notify();
+      if (live && buf[buf.length - 1] === e) notifyAppend(e);
+      else notify();
     };
     ctx.subscriptions.push(
       app.events.on("activity", (e) => {
@@ -287,6 +291,40 @@ var main_default = {
             toggle.textContent = mascotOn() ? ko ? "\uBE0C\uC774\uD29C\uBE0C \uCF2C" : "mascot on" : ko ? "\uBE0C\uC774\uD29C\uBE0C \uB054" : "mascot off";
           };
           toggle.onclick = () => void app.commands.execute("plugin.soksak-plugin-activity.mascot.toggle", {});
+          const renderRow = (e, unreadSet) => {
+            const frag = document.createDocumentFragment();
+            const row = document.createElement("div");
+            row.className = `al-row k-${e.kind.split(".").join("-")}${narrated.has(e.seq) ? " spoken" : ""}${unreadSet.has(e.seq) ? " unread" : ""}${isSetMember(e) ? " set" : ""}${typeof e.payload.origin === "string" && e.payload.origin ? " sys" : ""}`;
+            const t = document.createElement("span");
+            t.className = "al-time";
+            t.textContent = new Date(e.ts).toTimeString().slice(0, 8);
+            const actor = actorOf(e, ko);
+            if (actor) {
+              const chip = document.createElement("span");
+              chip.className = "al-actor";
+              chip.textContent = actor;
+              t.appendChild(chip);
+            }
+            const x = document.createElement("span");
+            x.className = "al-text";
+            x.textContent = lineOf(e);
+            row.append(t, x);
+            frag.appendChild(row);
+            const media = mediaOf(e);
+            if (media) {
+              const img = document.createElement("img");
+              img.className = "al-shot";
+              img.alt = "";
+              if (media.base64) img.src = `data:${media.kind};base64,${media.base64}`;
+              else if (media.path && app.fs?.readBinary) {
+                void app.fs.readBinary(media.path).then((f) => {
+                  img.src = `data:${f.mime};base64,${f.base64}`;
+                }).catch(() => img.remove());
+              }
+              frag.appendChild(img);
+            }
+            return frag;
+          };
           const render = () => {
             renderBar();
             log.replaceChildren();
@@ -299,41 +337,20 @@ var main_default = {
             }
             const unreadSet = new Set(unreadEntries().map((x) => x.seq));
             viewCtx.setBadge?.(unreadSet.size > 0 ? unreadSet.size : null);
-            for (const e of buf) {
-              const row = document.createElement("div");
-              row.className = `al-row k-${e.kind.split(".").join("-")}${narrated.has(e.seq) ? " spoken" : ""}${unreadSet.has(e.seq) ? " unread" : ""}${isSetMember(e) ? " set" : ""}${typeof e.payload.origin === "string" && e.payload.origin ? " sys" : ""}`;
-              const t = document.createElement("span");
-              t.className = "al-time";
-              t.textContent = new Date(e.ts).toTimeString().slice(0, 8);
-              const actor = actorOf(e, ko);
-              if (actor) {
-                const chip = document.createElement("span");
-                chip.className = "al-actor";
-                chip.textContent = actor;
-                t.appendChild(chip);
-              }
-              const x = document.createElement("span");
-              x.className = "al-text";
-              x.textContent = lineOf(e);
-              row.append(t, x);
-              log.appendChild(row);
-              const media = mediaOf(e);
-              if (media) {
-                const img = document.createElement("img");
-                img.className = "al-shot";
-                img.alt = "";
-                if (media.base64) img.src = `data:${media.kind};base64,${media.base64}`;
-                else if (media.path && app.fs?.readBinary) {
-                  void app.fs.readBinary(media.path).then((f) => {
-                    img.src = `data:${f.mime};base64,${f.base64}`;
-                  }).catch(() => img.remove());
-                }
-                log.appendChild(img);
-              }
-            }
+            for (const e of buf) log.appendChild(renderRow(e, unreadSet));
             log.scrollTop = log.scrollHeight;
           };
-          const listener = render;
+          const listener = {
+            refresh: render,
+            append: (e) => {
+              if (buf.length === 1) return render();
+              const unreadSet = new Set(unreadEntries().map((x) => x.seq));
+              viewCtx.setBadge?.(unreadSet.size > 0 ? unreadSet.size : null);
+              log.appendChild(renderRow(e, unreadSet));
+              while (log.children.length > 0 && log.children.length > buf.length * 2) log.firstChild.remove();
+              log.scrollTop = log.scrollHeight;
+            }
+          };
           viewListeners.add(listener);
           render();
           container._alDispose = () => viewListeners.delete(listener);

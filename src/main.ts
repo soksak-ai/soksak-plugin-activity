@@ -67,7 +67,7 @@ export default {
     const ko = (app.locale?.() ?? "ko").startsWith("ko");
     const buf: ActivityEntry[] = [];
     const narrated = new Set<number>(); // seq — list 커맨드/검증용(이 창이 읽은 것)
-    const viewListeners = new Set<() => void>();
+    const viewListeners = new Set<{ refresh: () => void; append: (e: ActivityEntry) => void }>();
     let mascotWarned = false;
     // 읽음 커서(watermark) — "어디까지 읽었는지"의 단일 진실. kv 영속 + 창 간 공유(watch)로
     // 리로드/다중 창에서 같은 엔트리를 중복 낭독하지 않는다. 커서 이하 seq 는 절대 읽지 않는다.
@@ -141,7 +141,10 @@ export default {
     };
 
     const notify = () => {
-      for (const fn of viewListeners) fn();
+      for (const l of viewListeners) l.refresh();
+    };
+    const notifyAppend = (e: ActivityEntry) => {
+      for (const l of viewListeners) l.append(e);
     };
 
     // 낭독 — 스펙 준수 + 읽음 커서 + 단일 낭독자: tts 문장이 있고 커서를 전진시킨 엔트리만 say.
@@ -209,7 +212,8 @@ export default {
     const ingest = (e: ActivityEntry, live: boolean) => {
       if (!insertEntry(buf, e)) return;
       if (live) narrate(e); // 백필은 과거 — 낭독하지 않는다(라이브만). 자격 없으면 안 읽음 적립
-      notify();
+      if (live && buf[buf.length - 1] === e) notifyAppend(e); // 흔한 경로: tail 추가 = 증분
+      else notify(); // 백필·지연 도착(중간 삽입)·상태 변화 — 전체 갱신
     };
 
     // 라이브 — 허브 전체 스트림(창 필터 없음: 오케스트레이터와 동일 내용)
@@ -310,6 +314,44 @@ export default {
           };
           toggle.onclick = () => void app.commands.execute("plugin.soksak-plugin-activity.mascot.toggle", {});
 
+          const renderRow = (e: ActivityEntry, unreadSet: Set<number>): DocumentFragment => {
+            const frag = document.createDocumentFragment();
+            const row = document.createElement("div");
+            row.className = `al-row k-${e.kind.split(".").join("-")}${narrated.has(e.seq) ? " spoken" : ""}${unreadSet.has(e.seq) ? " unread" : ""}${isSetMember(e) ? " set" : ""}${typeof e.payload.origin === "string" && e.payload.origin ? " sys" : ""}`;
+            const t = document.createElement("span");
+            t.className = "al-time";
+            t.textContent = new Date(e.ts).toTimeString().slice(0, 8);
+            const actor = actorOf(e, ko);
+            if (actor) {
+              const chip = document.createElement("span");
+              chip.className = "al-actor";
+              chip.textContent = actor;
+              t.appendChild(chip);
+            }
+            const x = document.createElement("span");
+            x.className = "al-text";
+            x.textContent = lineOf(e);
+            row.append(t, x);
+            frag.appendChild(row);
+            // 응답이 media 를 선언하면 이미지로 렌더(오케스트레이터 동형 — 경로 문자열 금지).
+            const media = mediaOf(e);
+            if (media) {
+              const img = document.createElement("img");
+              img.className = "al-shot";
+              img.alt = "";
+              if (media.base64) img.src = `data:${media.kind};base64,${media.base64}`;
+              else if (media.path && app.fs?.readBinary) {
+                void app.fs
+                  .readBinary(media.path)
+                  .then((f) => {
+                    img.src = `data:${f.mime};base64,${f.base64}`;
+                  })
+                  .catch(() => img.remove()); // 파일 소실 등 — 조용히 생략(오케 동형)
+              }
+              frag.appendChild(img);
+            }
+            return frag;
+          };
           const render = () => {
             renderBar();
             log.replaceChildren();
@@ -322,45 +364,24 @@ export default {
             }
             const unreadSet = new Set(unreadEntries().map((x) => x.seq));
             viewCtx.setBadge?.(unreadSet.size > 0 ? unreadSet.size : null);
-            for (const e of buf) {
-              const row = document.createElement("div");
-              row.className = `al-row k-${e.kind.split(".").join("-")}${narrated.has(e.seq) ? " spoken" : ""}${unreadSet.has(e.seq) ? " unread" : ""}${isSetMember(e) ? " set" : ""}${typeof e.payload.origin === "string" && e.payload.origin ? " sys" : ""}`;
-              const t = document.createElement("span");
-              t.className = "al-time";
-              t.textContent = new Date(e.ts).toTimeString().slice(0, 8);
-              const actor = actorOf(e, ko);
-              if (actor) {
-                const chip = document.createElement("span");
-                chip.className = "al-actor";
-                chip.textContent = actor;
-                t.appendChild(chip);
-              }
-              const x = document.createElement("span");
-              x.className = "al-text";
-              x.textContent = lineOf(e);
-              row.append(t, x);
-              log.appendChild(row);
-              // 응답이 media 를 선언하면 이미지로 렌더(오케스트레이터 동형 — 경로 문자열 금지).
-              const media = mediaOf(e);
-              if (media) {
-                const img = document.createElement("img");
-                img.className = "al-shot";
-                img.alt = "";
-                if (media.base64) img.src = `data:${media.kind};base64,${media.base64}`;
-                else if (media.path && app.fs?.readBinary) {
-                  void app.fs
-                    .readBinary(media.path)
-                    .then((f) => {
-                      img.src = `data:${f.mime};base64,${f.base64}`;
-                    })
-                    .catch(() => img.remove()); // 파일 소실 등 — 조용히 생략(오케 동형)
-                }
-                log.appendChild(img);
-              }
-            }
+            for (const e of buf) log.appendChild(renderRow(e, unreadSet));
             log.scrollTop = log.scrollHeight;
           };
-          const listener = render;
+          // 증분 렌더 — 라이브 유량(스케줄 2초 주기 포함)마다 300행 전량 재구성이 상시
+          // style/layout churn 을 만들던 원천(실측). tail 추가는 행 append 만, 상태성 변화
+          // (커서·배지·중간 삽입)만 전체 갱신을 탄다.
+          const listener = {
+            refresh: render,
+            append: (e: ActivityEntry) => {
+              if (buf.length === 1) return render(); // 빈 상태 플레이스홀더 제거 경로
+              const unreadSet = new Set(unreadEntries().map((x) => x.seq));
+              viewCtx.setBadge?.(unreadSet.size > 0 ? unreadSet.size : null);
+              log.appendChild(renderRow(e, unreadSet));
+              // 버퍼 캡 절사와 동기 — DOM 도 앞에서 걷어낸다(행+동반 이미지).
+              while (log.children.length > 0 && log.children.length > buf.length * 2) log.firstChild!.remove();
+              log.scrollTop = log.scrollHeight;
+            },
+          };
           viewListeners.add(listener);
           render();
           (container as HTMLElement & { _alDispose?: () => void })._alDispose = () =>
