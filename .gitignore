@@ -1,0 +1,9 @@
+node_modules/
+*.log
+.DS_Store
+
+# 머신-로컬 dev 마커
+.soksak.json
+
+# local-only working notes (never committed)
+secret/
