@@ -348,8 +348,8 @@ var main_default = {
       }
     });
     reg("vtube.toggle", {
-      tts: false,
-      // 낭독 제어 계열 — 자기 조작 무낭독
+      speak: () => "",
+      // 낭독 제어 계열 — 자기 조작 무낭독(§3)
       description: "Toggle character narration + mascot (persists via the vtube setting).",
       triggers: { ko: "\uBE0C\uC774\uD29C\uBE0C \uB0AD\uB3C5 \uB9C8\uC2A4\uCF54\uD2B8 \uCF1C\uAE30 \uB044\uAE30" },
       params: { on: { type: "boolean", description: "explicit state; omit to flip", required: false } },

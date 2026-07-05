@@ -373,7 +373,7 @@ export default {
     });
 
     reg("vtube.toggle", {
-      tts: false, // 낭독 제어 계열 — 자기 조작 무낭독
+      speak: () => "", // 낭독 제어 계열 — 자기 조작 무낭독(§3)
       description: "Toggle character narration + mascot (persists via the vtube setting).",
       triggers: { ko: "브이튜브 낭독 마스코트 켜기 끄기" },
       params: { on: { type: "boolean", description: "explicit state; omit to flip", required: false } },
