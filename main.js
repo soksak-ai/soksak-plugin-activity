@@ -167,6 +167,11 @@ var main_default = {
         const entries = r?.data?.entries ?? r?.entries ?? [];
         for (const e of entries) ingest(e, false);
         const maxSeq = entries.reduce((m, e) => Math.max(m, e.seq), -1);
+        if (maxSeq >= 0 && cursor > maxSeq) {
+          cursor = maxSeq;
+          void app.data?.kv.set(CURSOR_KEY, maxSeq).catch(() => {
+          });
+        }
         if (maxSeq >= 0) advanceCursor(maxSeq);
       }).catch(() => {
       })

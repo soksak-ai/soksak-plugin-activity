@@ -189,6 +189,13 @@ export default {
           const entries = (r?.data?.entries ?? r?.entries ?? []) as ActivityEntry[];
           for (const e of entries) ingest(e, false);
           const maxSeq = entries.reduce((m, e) => Math.max(m, e.seq), -1);
+          // 커서 불변식: 최신 seq 를 초과할 수 없다. 초과 = 유실 잔재(허브 영속 결번 등으로
+          // 재시작 재개점이 과거 커서보다 낮은 경우) — 그대로 두면 모든 새 엔트리가 "이미
+          // 읽음"이 되어 낭독이 전면 침묵한다(실측). 최신으로 스냅해 불변식을 복원한다.
+          if (maxSeq >= 0 && cursor > maxSeq) {
+            cursor = maxSeq;
+            void app.data?.kv.set(CURSOR_KEY, maxSeq).catch(() => {});
+          }
           if (maxSeq >= 0) advanceCursor(maxSeq);
         })
         .catch(() => {}),
