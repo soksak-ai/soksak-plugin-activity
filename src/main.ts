@@ -7,7 +7,7 @@
 //   낭독 자격 = 낭독자 OR 타겟된 창(엔트리가 이 창에서 발생 — relay ownWindow). 자격 없는
 //   도착분은 "안 읽음" 적립, 낭독자가 되면 소화하되 백로그 3개 초과면 마지막 3개만 읽고
 //   전체 읽음 처리(커서 일괄 전진 — 밀린 독백 방지). say 는 spec tts:false 라 되먹임 불가.
-import { BUFFER_CAP, insertEntry, isSetMember, lineOf, mediaOf, ttsOf, type ActivityEntry } from "./feed";
+import { actorOf, BUFFER_CAP, insertEntry, isSetMember, lineOf, mediaOf, ttsOf, type ActivityEntry } from "./feed";
 
 interface Disposable {
   dispose(): void;
@@ -288,7 +288,8 @@ export default {
               row.className = `al-row k-${e.kind.split(".").join("-")}${narrated.has(e.seq) ? " spoken" : ""}${unreadSet.has(e.seq) ? " unread" : ""}${isSetMember(e) ? " set" : ""}${typeof e.payload.origin === "string" && e.payload.origin ? " sys" : ""}`;
               const t = document.createElement("span");
               t.className = "al-time";
-              t.textContent = new Date(e.ts).toTimeString().slice(0, 8);
+              const actor = actorOf(e, ko);
+              t.textContent = new Date(e.ts).toTimeString().slice(0, 8) + (actor ? ` ·${actor}` : "");
               const x = document.createElement("span");
               x.className = "al-text";
               x.textContent = lineOf(e);

@@ -1,6 +1,6 @@
 // 피드 순수부 테스트 — 버퍼 규율(중복·정렬·상한)과 낭독 스펙 준수.
 import { describe, expect, it } from "vitest";
-import { BUFFER_CAP, insertEntry, isSetMember, lineOf, ttsOf, type ActivityEntry } from "./feed";
+import { actorOf, BUFFER_CAP, insertEntry, isSetMember, lineOf, ttsOf, type ActivityEntry } from "./feed";
 
 const e = (seq: number, kind = "command.executed", payload: Record<string, unknown> = {}): ActivityEntry => ({
   seq,
@@ -67,5 +67,15 @@ describe("isSetMember — parentId 들여쓰기 마커", () => {
     expect(isSetMember(e(1, "command.executed", { parentId: "t1" }))).toBe(true);
     expect(isSetMember(e(2, "chat.prompt", { turnId: "t1" }))).toBe(false);
     expect(isSetMember(e(3, "command.executed", {}))).toBe(false);
+  });
+});
+
+describe("actorOf — 발화자 라벨(§5 R3, 오케스트레이터 동형)", () => {
+  it("origin 우선, 없으면 유래 소스, 사람 손은 무라벨", () => {
+    expect(actorOf({ ...e(1), source: "remote", payload: { origin: "schedule" } }, true)).toBe("스케줄");
+    expect(actorOf({ ...e(2), source: "ui", payload: { origin: "internal" } }, true)).toBe("내부");
+    expect(actorOf({ ...e(3), source: "remote", payload: {} }, true)).toBe("원격");
+    expect(actorOf({ ...e(4), source: "terminal", payload: {} }, true)).toBe("터미널");
+    expect(actorOf({ ...e(5), source: "ui", payload: {} }, true)).toBe("");
   });
 });

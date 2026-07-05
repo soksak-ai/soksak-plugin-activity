@@ -65,6 +65,18 @@ export function isSetMember(e: ActivityEntry): boolean {
   return typeof e.payload.parentId === "string" && e.payload.parentId !== "";
 }
 
+/** 발화자 라벨(§5 R3, 오케스트레이터 동형) — origin 우선(스케줄·내부), 없으면 유래 소스
+ *  (remote=에이전트/CLI, terminal). 사람 손(ui)·오케 콘솔은 라벨 없음(행 자체가 사람의 것). */
+export function actorOf(e: ActivityEntry, ko: boolean): string {
+  const origin = typeof e.payload.origin === "string" ? e.payload.origin : "";
+  if (origin === "schedule") return ko ? "스케줄" : "schedule";
+  if (origin === "internal") return ko ? "내부" : "internal";
+  if (origin) return origin;
+  if (e.source === "remote") return ko ? "원격" : "remote";
+  if (e.source === "terminal") return ko ? "터미널" : "terminal";
+  return "";
+}
+
 /** 낭독 문장 — payload.tts 문자열은 그대로, true 는 종류별 합성, 그 외 null(침묵). */
 export function ttsOf(e: ActivityEntry, ko: boolean): string | null {
   const t = e.payload.tts;

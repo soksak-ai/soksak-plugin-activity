@@ -46,6 +46,15 @@ function mediaOf(e) {
 function isSetMember(e) {
   return typeof e.payload.parentId === "string" && e.payload.parentId !== "";
 }
+function actorOf(e, ko) {
+  const origin = typeof e.payload.origin === "string" ? e.payload.origin : "";
+  if (origin === "schedule") return ko ? "\uC2A4\uCF00\uC904" : "schedule";
+  if (origin === "internal") return ko ? "\uB0B4\uBD80" : "internal";
+  if (origin) return origin;
+  if (e.source === "remote") return ko ? "\uC6D0\uACA9" : "remote";
+  if (e.source === "terminal") return ko ? "\uD130\uBBF8\uB110" : "terminal";
+  return "";
+}
 function ttsOf(e, ko) {
   const t = e.payload.tts;
   if (typeof t === "string" && t.trim()) return t.trim();
@@ -260,7 +269,8 @@ var main_default = {
               row.className = `al-row k-${e.kind.split(".").join("-")}${narrated.has(e.seq) ? " spoken" : ""}${unreadSet.has(e.seq) ? " unread" : ""}${isSetMember(e) ? " set" : ""}${typeof e.payload.origin === "string" && e.payload.origin ? " sys" : ""}`;
               const t = document.createElement("span");
               t.className = "al-time";
-              t.textContent = new Date(e.ts).toTimeString().slice(0, 8);
+              const actor = actorOf(e, ko);
+              t.textContent = new Date(e.ts).toTimeString().slice(0, 8) + (actor ? ` \xB7${actor}` : "");
               const x = document.createElement("span");
               x.className = "al-text";
               x.textContent = lineOf(e);
