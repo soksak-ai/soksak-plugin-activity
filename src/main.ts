@@ -14,6 +14,7 @@ interface Disposable {
 }
 interface HostApp {
   locale?: () => string;
+  windowLabel?: () => string;
   ui: {
     registerView(
       id: string,
@@ -46,6 +47,18 @@ interface PluginCtx {
 }
 
 const VT = "plugin.soksak-plugin-mascot.";
+
+// 낭독자 kv 판독 — 신형 {id, window} / 구형 string(id) 겸용.
+function narratorIdOf(v: unknown): string | null {
+  if (typeof v === "string") return v;
+  if (v && typeof v === "object" && typeof (v as { id?: unknown }).id === "string") return (v as { id: string }).id;
+  return null;
+}
+function narratorWindowOf(v: unknown): string | null {
+  if (v && typeof v === "object" && typeof (v as { window?: unknown }).window === "string")
+    return (v as { window: string }).window;
+  return null;
+}
 const VERSION = "1.0.0";
 
 export default {
@@ -80,7 +93,7 @@ export default {
           } else if (key === NARRATOR_KEY) {
             void app.data!.kv.get(NARRATOR_KEY).then((v) => {
               const was = isNarrator;
-              isNarrator = v === myId; // 다른 창이 클레임 — 즉시 양보(단일 목소리)
+              isNarrator = narratorIdOf(v) === myId; // 다른 창이 클레임 — 즉시 양보(단일 목소리)
               // 자격 상실 = 엔진 반납(규칙: 엔진의 생존은 발화 자격과 함께 간다 — 모델 상주
               // 프로세스가 창마다 남아 메모리를 먹던 원천). 다음 자격 창이 lazy 재기동.
               if (was && !isNarrator) void app.commands.execute(VT + "release", {}, { origin: "internal" }).catch(() => {});
@@ -122,7 +135,8 @@ export default {
     const claimNarrator = () => {
       const was = isNarrator;
       isNarrator = true;
-      void app.data?.kv.set(NARRATOR_KEY, myId).catch(() => {});
+      // 창 label 동봉 — 부트 시 "낭독자 창이 아직 살아있나"를 실존 대조로 판정(하트비트·폴링 없이).
+      void app.data?.kv.set(NARRATOR_KEY, { id: myId, window: app.windowLabel?.() ?? "" }).catch(() => {});
       if (!was) syncMascot(); // 자격 획득 = 이 창에 마스코트
     };
 
@@ -175,9 +189,21 @@ export default {
     // 활성화 시점: 현재 포커스 창이면 즉시 클레임, 아니면 기존 낭독자 부재 시에만 클레임(첫 창)
     if (typeof document !== "undefined" && document.hasFocus()) claimNarrator();
     else
-      void app.data?.kv.get(NARRATOR_KEY).then((v) => {
-        if (v == null) claimNarrator();
-        else isNarrator = v === myId;
+      void app.data?.kv.get(NARRATOR_KEY).then(async (v) => {
+        if (v == null) return claimNarrator();
+        isNarrator = narratorIdOf(v) === myId;
+        if (isNarrator) return;
+        // 죽은 낭독자 승계 — 기록된 창이 더는 없으면(닫힘) 자격은 무주공산이다. 표시가 자격에
+        // 묶인 뒤로 이 엣지는 "유일한 창인데 마스코트 없음"으로 표면화된다(실측). 실존 대조 1회.
+        const w = narratorWindowOf(v);
+        if (w === null) return claimNarrator(); // 구형 기록(창 미상) — 재클레임으로 신형 전환
+        try {
+          const r = await app.commands.execute("window.list", {}, { origin: "internal" });
+          const labels = ((r?.data?.labels ?? r?.labels ?? []) as string[]) || [];
+          if (!labels.includes(w)) claimNarrator();
+        } catch {
+          /* 대조 불가 — 다음 포커스 획득이 자연 승계 */
+        }
       });
 
     const ingest = (e: ActivityEntry, live: boolean) => {

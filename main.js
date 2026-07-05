@@ -75,6 +75,16 @@ function ttsOf(e, ko) {
 
 // src/main.ts
 var VT = "plugin.soksak-plugin-mascot.";
+function narratorIdOf(v) {
+  if (typeof v === "string") return v;
+  if (v && typeof v === "object" && typeof v.id === "string") return v.id;
+  return null;
+}
+function narratorWindowOf(v) {
+  if (v && typeof v === "object" && typeof v.window === "string")
+    return v.window;
+  return null;
+}
 var VERSION = "1.0.0";
 var main_default = {
   activate(ctx) {
@@ -103,7 +113,7 @@ var main_default = {
           } else if (key === NARRATOR_KEY) {
             void app.data.kv.get(NARRATOR_KEY).then((v) => {
               const was = isNarrator;
-              isNarrator = v === myId;
+              isNarrator = narratorIdOf(v) === myId;
               if (was && !isNarrator) void app.commands.execute(VT + "release", {}, { origin: "internal" }).catch(() => {
               });
               if (was !== isNarrator) syncMascot();
@@ -140,7 +150,7 @@ var main_default = {
     const claimNarrator = () => {
       const was = isNarrator;
       isNarrator = true;
-      void app.data?.kv.set(NARRATOR_KEY, myId).catch(() => {
+      void app.data?.kv.set(NARRATOR_KEY, { id: myId, window: app.windowLabel?.() ?? "" }).catch(() => {
       });
       if (!was) syncMascot();
     };
@@ -179,9 +189,18 @@ var main_default = {
     );
     if (typeof document !== "undefined" && document.hasFocus()) claimNarrator();
     else
-      void app.data?.kv.get(NARRATOR_KEY).then((v) => {
-        if (v == null) claimNarrator();
-        else isNarrator = v === myId;
+      void app.data?.kv.get(NARRATOR_KEY).then(async (v) => {
+        if (v == null) return claimNarrator();
+        isNarrator = narratorIdOf(v) === myId;
+        if (isNarrator) return;
+        const w = narratorWindowOf(v);
+        if (w === null) return claimNarrator();
+        try {
+          const r = await app.commands.execute("window.list", {}, { origin: "internal" });
+          const labels = (r?.data?.labels ?? r?.labels ?? []) || [];
+          if (!labels.includes(w)) claimNarrator();
+        } catch {
+        }
       });
     const ingest = (e, live) => {
       if (!insertEntry(buf, e)) return;
