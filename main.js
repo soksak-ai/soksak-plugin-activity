@@ -30,9 +30,18 @@ function lineOf(e) {
       return `\u{1F4AC} ${p.text ?? ""}`;
     case "chat.answer":
       return `\u21A9 ${p.text ?? ""}`;
+    case "boot.error":
+      return `\uCC3D \uBD80\uD305 \uC624\uB958 \u2014 ${p.msg ?? ""}`;
     default:
       return e.kind;
   }
+}
+function mediaOf(e) {
+  const m = e.payload.media;
+  if (m && typeof m.kind === "string" && m.kind.startsWith("image/")) {
+    return { kind: m.kind, base64: m.base64, path: m.path };
+  }
+  return null;
 }
 function isSetMember(e) {
   return typeof e.payload.parentId === "string" && e.payload.parentId !== "";
@@ -78,13 +87,18 @@ var main_default = {
             });
           } else if (key === NARRATOR_KEY) {
             void app.data.kv.get(NARRATOR_KEY).then((v) => {
+              const was = isNarrator;
               isNarrator = v === myId;
+              if (was && !isNarrator) void app.commands.execute(VT + "release", {}).catch(() => {
+              });
             });
           } else if (key === VTUBE_KEY) {
             void app.data.kv.get(VTUBE_KEY).then((v) => {
               vtube = v !== false;
               syncMascot();
               if (vtube) drainUnread();
+              else void app.commands.execute(VT + "release", {}).catch(() => {
+              });
               notify();
             });
           }
@@ -210,6 +224,8 @@ var main_default = {
 .al-row.unread .al-text { color:#ffe9a8; }
 .al-row.unread .al-time::before { content:"\u25CF"; color:#ffcf5c; margin-right:3px; }
 .al-empty { color:#8a8a96; padding:12px; text-align:center; }
+/* \uC751\uB2F5 \uD45C\uC2DC \uBBF8\uB514\uC5B4 \u2014 \uC774\uBBF8\uC9C0\uB294 \uC774\uBBF8\uC9C0\uB85C(\uC624\uCF00\uC2A4\uD2B8\uB808\uC774\uD130 \uB3D9\uD615, MESSAGE-PROTOCOL media). */
+.al-shot { display:block; max-width:100%; border-radius:6px; margin:3px 0 3px 46px; }
 `;
           shadow.appendChild(style);
           const root = document.createElement("div");
@@ -250,6 +266,19 @@ var main_default = {
               x.textContent = lineOf(e);
               row.append(t, x);
               log.appendChild(row);
+              const media = mediaOf(e);
+              if (media) {
+                const img = document.createElement("img");
+                img.className = "al-shot";
+                img.alt = "";
+                if (media.base64) img.src = `data:${media.kind};base64,${media.base64}`;
+                else if (media.path && app.fs?.readBinary) {
+                  void app.fs.readBinary(media.path).then((f) => {
+                    img.src = `data:${f.mime};base64,${f.base64}`;
+                  }).catch(() => img.remove());
+                }
+                log.appendChild(img);
+              }
             }
             log.scrollTop = log.scrollHeight;
           };

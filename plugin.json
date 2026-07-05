@@ -16,7 +16,8 @@
     "ui",
     "commands",
     "data",
-    "terminal"
+    "terminal",
+    "fs:read"
   ],
   "dependencies": {
     "soksak-plugin-vtube-tts": "^1.0.0"

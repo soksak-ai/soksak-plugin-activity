@@ -44,9 +44,20 @@ export function lineOf(e: ActivityEntry): string {
       return `💬 ${p.text ?? ""}`;
     case "chat.answer":
       return `↩ ${p.text ?? ""}`;
+    case "boot.error":
+      return `창 부팅 오류 — ${(p as { msg?: string }).msg ?? ""}`;
     default:
       return e.kind;
   }
+}
+
+/** 응답이 선언한 표시 미디어(MESSAGE-PROTOCOL) — 이미지는 이미지로(오케스트레이터 동형). */
+export function mediaOf(e: ActivityEntry): { kind: string; base64?: string; path?: string } | null {
+  const m = e.payload.media as { kind?: string; base64?: string; path?: string } | undefined;
+  if (m && typeof m.kind === "string" && m.kind.startsWith("image/")) {
+    return { kind: m.kind, base64: m.base64, path: m.path };
+  }
+  return null;
 }
 
 /** 대화 세트 구성원(payload.parentId 보유) — flat 사이드바의 들여쓰기 마커 대상. */

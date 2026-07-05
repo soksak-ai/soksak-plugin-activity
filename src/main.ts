@@ -7,7 +7,7 @@
 //   낭독 자격 = 낭독자 OR 타겟된 창(엔트리가 이 창에서 발생 — relay ownWindow). 자격 없는
 //   도착분은 "안 읽음" 적립, 낭독자가 되면 소화하되 백로그 3개 초과면 마지막 3개만 읽고
 //   전체 읽음 처리(커서 일괄 전진 — 밀린 독백 방지). say 는 spec tts:false 라 되먹임 불가.
-import { BUFFER_CAP, insertEntry, isSetMember, lineOf, ttsOf, type ActivityEntry } from "./feed";
+import { BUFFER_CAP, insertEntry, isSetMember, lineOf, mediaOf, ttsOf, type ActivityEntry } from "./feed";
 
 interface Disposable {
   dispose(): void;
@@ -76,13 +76,18 @@ export default {
             });
           } else if (key === NARRATOR_KEY) {
             void app.data!.kv.get(NARRATOR_KEY).then((v) => {
+              const was = isNarrator;
               isNarrator = v === myId; // 다른 창이 클레임 — 즉시 양보(단일 목소리)
+              // 자격 상실 = 엔진 반납(규칙: 엔진의 생존은 발화 자격과 함께 간다 — 모델 상주
+              // 프로세스가 창마다 남아 메모리를 먹던 원천). 다음 자격 창이 lazy 재기동.
+              if (was && !isNarrator) void app.commands.execute(VT + "release", {}).catch(() => {});
             });
           } else if (key === VTUBE_KEY) {
             void app.data!.kv.get(VTUBE_KEY).then((v) => {
               vtube = v !== false;
               syncMascot();
               if (vtube) drainUnread();
+              else void app.commands.execute(VT + "release", {}).catch(() => {}); // 끔 = 자격 반납
               notify();
             });
           }
@@ -240,6 +245,8 @@ export default {
 .al-row.unread .al-text { color:#ffe9a8; }
 .al-row.unread .al-time::before { content:"●"; color:#ffcf5c; margin-right:3px; }
 .al-empty { color:#8a8a96; padding:12px; text-align:center; }
+/* 응답 표시 미디어 — 이미지는 이미지로(오케스트레이터 동형, MESSAGE-PROTOCOL media). */
+.al-shot { display:block; max-width:100%; border-radius:6px; margin:3px 0 3px 46px; }
 `;
           shadow.appendChild(style);
           const root = document.createElement("div");
@@ -284,6 +291,23 @@ export default {
               x.textContent = lineOf(e);
               row.append(t, x);
               log.appendChild(row);
+              // 응답이 media 를 선언하면 이미지로 렌더(오케스트레이터 동형 — 경로 문자열 금지).
+              const media = mediaOf(e);
+              if (media) {
+                const img = document.createElement("img");
+                img.className = "al-shot";
+                img.alt = "";
+                if (media.base64) img.src = `data:${media.kind};base64,${media.base64}`;
+                else if (media.path && app.fs?.readBinary) {
+                  void app.fs
+                    .readBinary(media.path)
+                    .then((f) => {
+                      img.src = `data:${f.mime};base64,${f.base64}`;
+                    })
+                    .catch(() => img.remove()); // 파일 소실 등 — 조용히 생략(오케 동형)
+                }
+                log.appendChild(img);
+              }
             }
             log.scrollTop = log.scrollHeight;
           };
