@@ -51,14 +51,41 @@ var main_default = {
     const narrated = /* @__PURE__ */ new Set();
     const viewListeners = /* @__PURE__ */ new Set();
     let vtubeWarned = false;
+    const CURSOR_KEY = "narratedSeq";
+    let cursor = -1;
+    let cursorReady = false;
+    const loadCursor = app.data?.kv.get(CURSOR_KEY).then((v) => {
+      if (typeof v === "number") cursor = v;
+    }).catch(() => {
+    }).finally(() => {
+      cursorReady = true;
+    });
+    if (app.data?.kv.watch)
+      ctx.subscriptions.push(
+        app.data.kv.watch((key) => {
+          if (key !== CURSOR_KEY) return;
+          void app.data.kv.get(CURSOR_KEY).then((v) => {
+            if (typeof v === "number" && v > cursor) cursor = v;
+          });
+        })
+      );
+    const advanceCursor = (seq) => {
+      if (seq <= cursor) return false;
+      cursor = seq;
+      void app.data?.kv.set(CURSOR_KEY, seq).catch(() => {
+      });
+      return true;
+    };
     const vtubeOn = () => app.settings.get("vtube") !== false;
+    let focused = typeof document !== "undefined" ? document.hasFocus() : true;
     const notify = () => {
       for (const fn of viewListeners) fn();
     };
     const narrate = (e) => {
-      if (!vtubeOn()) return;
+      if (!vtubeOn() || !cursorReady || !focused) return;
       const text = ttsOf(e, ko);
       if (!text) return;
+      if (!advanceCursor(e.seq)) return;
       narrated.add(e.seq);
       void app.commands.execute(VT + "say", { text }).catch((err) => {
         if (!vtubeWarned) {
@@ -67,6 +94,19 @@ var main_default = {
         }
       });
     };
+    const unreadEntries = () => buf.filter((e) => e.seq > cursor && ttsOf(e, ko) !== null);
+    const drainUnread = () => {
+      if (!vtubeOn() || !cursorReady || !focused) return;
+      for (const e of unreadEntries()) narrate(e);
+      notify();
+    };
+    ctx.subscriptions.push(
+      app.events.on("app.focus", (p) => {
+        focused = p.focused === true;
+        if (focused) drainUnread();
+        notify();
+      })
+    );
     const ingest = (e, live) => {
       if (!insertEntry(buf, e)) return;
       if (live) narrate(e);
@@ -78,22 +118,28 @@ var main_default = {
         ingest(entry, true);
       })
     );
-    void app.commands.execute("activity.recent", { limit: 100 }).then((r) => {
-      for (const e of r?.data?.entries ?? r?.entries ?? []) ingest(e, false);
-    }).catch(() => {
-    });
+    void Promise.resolve(loadCursor).then(
+      () => app.commands.execute("activity.recent", { limit: 100 }).then((r) => {
+        const entries = r?.data?.entries ?? r?.entries ?? [];
+        for (const e of entries) ingest(e, false);
+        const maxSeq = entries.reduce((m, e) => Math.max(m, e.seq), -1);
+        if (maxSeq >= 0) advanceCursor(maxSeq);
+      }).catch(() => {
+      })
+    );
     const syncMascot = () => {
       void app.commands.execute(VT + "mascot.toggle", { on: vtubeOn() }).catch(() => {
       });
     };
     ctx.subscriptions.push(app.settings.onChange(() => {
       syncMascot();
+      drainUnread();
       notify();
     }));
     syncMascot();
     ctx.subscriptions.push(
       app.ui.registerView("log", {
-        mount(container) {
+        mount(container, viewCtx) {
           container.style.position = "relative";
           const shadow = container.shadowRoot ?? container.attachShadow({ mode: "open" });
           shadow.replaceChildren();
@@ -111,6 +157,8 @@ var main_default = {
 .al-row.k-terminal-command-finished .al-text { color:#bfe3bf; }
 .al-row.k-turn-ended .al-text { color:#e8c8d8; }
 .al-row.spoken .al-time::after { content:"\u{1F50A}"; margin-left:2px; }
+.al-row.unread .al-text { color:#ffe9a8; }
+.al-row.unread .al-time::before { content:"\u25CF"; color:#ffcf5c; margin-right:3px; }
 .al-empty { color:#8a8a96; padding:12px; text-align:center; }
 `;
           shadow.appendChild(style);
@@ -139,9 +187,11 @@ var main_default = {
               log.appendChild(em);
               return;
             }
+            const unreadSet = new Set(unreadEntries().map((x) => x.seq));
+            viewCtx.setBadge?.(unreadSet.size > 0 ? unreadSet.size : null);
             for (const e of buf) {
               const row = document.createElement("div");
-              row.className = `al-row k-${e.kind.split(".").join("-")}${narrated.has(e.seq) ? " spoken" : ""}`;
+              row.className = `al-row k-${e.kind.split(".").join("-")}${narrated.has(e.seq) ? " spoken" : ""}${unreadSet.has(e.seq) ? " unread" : ""}`;
               const t = document.createElement("span");
               t.className = "al-time";
               t.textContent = new Date(e.ts).toTimeString().slice(0, 8);
@@ -173,18 +223,21 @@ var main_default = {
       description: "List buffered activity entries (same hub stream the orchestrator shows). narrated marks entries actually spoken.",
       triggers: { ko: "\uD65C\uB3D9 \uB85C\uADF8 \uBAA9\uB85D \uC870\uD68C" },
       params: { limit: { type: "number", description: "max entries (default 20)", required: false } },
-      returns: "{ ok, entries: [{seq, ts, kind, text, tts, narrated}] }",
+      returns: "{ ok, cursor, unreadCount, entries: [{seq, ts, kind, text, tts, narrated, unread}] }",
       handler: (p) => {
         const limit = typeof p.limit === "number" ? Math.max(1, p.limit) : 20;
         return {
           ok: true,
+          cursor,
+          unreadCount: unreadEntries().length,
           entries: buf.slice(-limit).map((e) => ({
             seq: e.seq,
             ts: e.ts,
             kind: e.kind,
             text: lineOf(e),
             tts: ttsOf(e, ko),
-            narrated: narrated.has(e.seq)
+            narrated: narrated.has(e.seq),
+            unread: e.seq > cursor && ttsOf(e, ko) !== null
           }))
         };
       }

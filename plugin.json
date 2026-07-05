@@ -15,6 +15,7 @@
   "permissions": [
     "ui",
     "commands",
+    "data",
     "terminal"
   ],
   "dependencies": {

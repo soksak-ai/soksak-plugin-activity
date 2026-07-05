@@ -1,7 +1,9 @@
 // soksak-plugin-activity — 프로젝트 창 사이드바의 활동로그(허브 전체 스트림) + vtube 낭독.
 // 데이터: 백필 activity.recent 1회 + 라이브 app.events.on("activity") — 폴링 0, 필터 없음
-// (오케스트레이터 피드와 동일 내용이 수용 기준). 낭독: payload.tts 스펙 준수(스킵 없음,
-// 도착 순서대로 vtube-tts.say — say 는 spec tts:false 라 되먹임 불가).
+// (오케스트레이터 피드와 동일 내용이 수용 기준).
+// 낭독 규율: payload.tts 스펙 준수 + 읽음 커서(kv 공유) + 활성 창 단독 낭독.
+//   활성(포커스) 창만 읽는다 — 비활성 동안 도착분은 "안 읽음"으로 적립되고, 포커스를 얻으면
+//   커서 이후를 순서대로 소화한다(스킵 없음). say 는 spec tts:false 라 되먹임 불가.
 import { BUFFER_CAP, insertEntry, lineOf, ttsOf, type ActivityEntry } from "./feed";
 
 interface Disposable {
@@ -12,7 +14,10 @@ interface HostApp {
   ui: {
     registerView(
       id: string,
-      provider: { mount(c: HTMLElement, ctx: unknown): void; unmount?(c: HTMLElement): void },
+      provider: {
+        mount(c: HTMLElement, ctx: { setBadge?: (b: number | "dot" | null) => void }): void;
+        unmount?(c: HTMLElement): void;
+      },
     ): Disposable;
   };
   commands: {
@@ -21,6 +26,13 @@ interface HostApp {
   };
   events: { on(event: string, fn: (payload: any) => void): Disposable };
   settings: { get(key: string): unknown; onChange(cb: (all: Record<string, unknown>) => void): Disposable };
+  data?: {
+    kv: {
+      get(key: string): Promise<unknown>;
+      set(key: string, value: unknown): Promise<void>;
+      watch(cb: (key: string) => void): Disposable;
+    };
+  };
 }
 interface PluginCtx {
   app: HostApp;
@@ -35,21 +47,54 @@ export default {
     const app = ctx.app;
     const ko = (app.locale?.() ?? "ko").startsWith("ko");
     const buf: ActivityEntry[] = [];
-    const narrated = new Set<number>(); // seq — list 커맨드/검증용
+    const narrated = new Set<number>(); // seq — list 커맨드/검증용(이 창이 읽은 것)
     const viewListeners = new Set<() => void>();
     let vtubeWarned = false;
+    // 읽음 커서(watermark) — "어디까지 읽었는지"의 단일 진실. kv 영속 + 창 간 공유(watch)로
+    // 리로드/다중 창에서 같은 엔트리를 중복 낭독하지 않는다. 커서 이하 seq 는 절대 읽지 않는다.
+    const CURSOR_KEY = "narratedSeq";
+    let cursor = -1;
+    let cursorReady = false; // kv 로드 전엔 낭독 보류(과거 몰아읽기 방지)
+    const loadCursor = app.data?.kv
+      .get(CURSOR_KEY)
+      .then((v) => {
+        if (typeof v === "number") cursor = v;
+      })
+      .catch(() => {})
+      .finally(() => {
+        cursorReady = true;
+      });
+    if (app.data?.kv.watch)
+      ctx.subscriptions.push(
+        app.data.kv.watch((key) => {
+          if (key !== CURSOR_KEY) return;
+          void app.data!.kv.get(CURSOR_KEY).then((v) => {
+            if (typeof v === "number" && v > cursor) cursor = v; // 다른 창이 전진 — 따라간다
+          });
+        }),
+      );
+    const advanceCursor = (seq: number) => {
+      if (seq <= cursor) return false;
+      cursor = seq; // 로컬 즉시 전진(레이스 창 최소화) 후 영속
+      void app.data?.kv.set(CURSOR_KEY, seq).catch(() => {});
+      return true;
+    };
 
     const vtubeOn = () => app.settings.get("vtube") !== false;
+    // 활성 창 단독 낭독 — 여러 창의 인스턴스 중 포커스 창만 발화(커서 공유가 중복을 이중 차단).
+    let focused = typeof document !== "undefined" ? document.hasFocus() : true;
 
     const notify = () => {
       for (const fn of viewListeners) fn();
     };
 
-    // 낭독 — 스펙 준수만: tts 문장이 있으면 도착 순서대로 say(스킵 없음). 실패는 1회 경고.
+    // 낭독 — 스펙 준수 + 읽음 커서 + 활성 창: tts 문장이 있고 커서를 전진시킨 엔트리만 say.
+    // (커서 이하 = 이미 읽음(이 창/다른 창/이전 세션) — 침묵. 몰아읽기·중복 낭독 원천 차단.)
     const narrate = (e: ActivityEntry) => {
-      if (!vtubeOn()) return;
+      if (!vtubeOn() || !cursorReady || !focused) return;
       const text = ttsOf(e, ko);
       if (!text) return;
+      if (!advanceCursor(e.seq)) return;
       narrated.add(e.seq);
       void app.commands.execute(VT + "say", { text }).catch((err) => {
         if (!vtubeWarned) {
@@ -59,9 +104,27 @@ export default {
       });
     };
 
+    /** 안 읽은 tts 엔트리(커서 초과) — 표시·배지·포커스 획득 시 소화 대상. */
+    const unreadEntries = () => buf.filter((e) => e.seq > cursor && ttsOf(e, ko) !== null);
+
+    /** 밀린 안 읽음 소화 — 포커스 획득/vtube 켬 시, 커서 이후를 순서대로(스킵 없음). */
+    const drainUnread = () => {
+      if (!vtubeOn() || !cursorReady || !focused) return;
+      for (const e of unreadEntries()) narrate(e);
+      notify();
+    };
+
+    ctx.subscriptions.push(
+      app.events.on("app.focus", (p: { focused: boolean }) => {
+        focused = p.focused === true;
+        if (focused) drainUnread();
+        notify();
+      }),
+    );
+
     const ingest = (e: ActivityEntry, live: boolean) => {
       if (!insertEntry(buf, e)) return;
-      if (live) narrate(e); // 백필은 과거 — 낭독하지 않는다(라이브만)
+      if (live) narrate(e); // 백필은 과거 — 낭독하지 않는다(라이브만). 비활성/꺼짐이면 안 읽음 적립
       notify();
     };
 
@@ -73,13 +136,18 @@ export default {
       }),
     );
 
-    // 백필 1회
-    void app.commands
-      .execute("activity.recent", { limit: 100 })
-      .then((r: any) => {
-        for (const e of r?.data?.entries ?? r?.entries ?? []) ingest(e as ActivityEntry, false);
-      })
-      .catch(() => {});
+    // 백필 1회 — 표시만(낭독 없음). 커서는 백필 최대 seq 까지 전진: 과거는 영원히 과거다.
+    void Promise.resolve(loadCursor).then(() =>
+      app.commands
+        .execute("activity.recent", { limit: 100 })
+        .then((r: any) => {
+          const entries = (r?.data?.entries ?? r?.entries ?? []) as ActivityEntry[];
+          for (const e of entries) ingest(e, false);
+          const maxSeq = entries.reduce((m, e) => Math.max(m, e.seq), -1);
+          if (maxSeq >= 0) advanceCursor(maxSeq);
+        })
+        .catch(() => {}),
+    );
 
     // 마스코트 동기 — vtube 토글이 캐릭터 표시까지 소유(on=등장, off=퇴장)
     const syncMascot = () => {
@@ -87,6 +155,7 @@ export default {
     };
     ctx.subscriptions.push(app.settings.onChange(() => {
       syncMascot();
+      drainUnread(); // vtube 를 켰다면 안 읽음부터 소화
       notify();
     }));
     syncMascot();
@@ -94,7 +163,7 @@ export default {
     // ── 뷰 ──
     ctx.subscriptions.push(
       app.ui.registerView("log", {
-        mount(container: HTMLElement) {
+        mount(container: HTMLElement, viewCtx: { setBadge?: (b: number | "dot" | null) => void }) {
           container.style.position = "relative";
           const shadow = container.shadowRoot ?? container.attachShadow({ mode: "open" });
           shadow.replaceChildren();
@@ -112,6 +181,8 @@ export default {
 .al-row.k-terminal-command-finished .al-text { color:#bfe3bf; }
 .al-row.k-turn-ended .al-text { color:#e8c8d8; }
 .al-row.spoken .al-time::after { content:"🔊"; margin-left:2px; }
+.al-row.unread .al-text { color:#ffe9a8; }
+.al-row.unread .al-time::before { content:"●"; color:#ffcf5c; margin-right:3px; }
 .al-empty { color:#8a8a96; padding:12px; text-align:center; }
 `;
           shadow.appendChild(style);
@@ -144,9 +215,11 @@ export default {
               log.appendChild(em);
               return;
             }
+            const unreadSet = new Set(unreadEntries().map((x) => x.seq));
+            viewCtx.setBadge?.(unreadSet.size > 0 ? unreadSet.size : null);
             for (const e of buf) {
               const row = document.createElement("div");
-              row.className = `al-row k-${e.kind.split(".").join("-")}${narrated.has(e.seq) ? " spoken" : ""}`;
+              row.className = `al-row k-${e.kind.split(".").join("-")}${narrated.has(e.seq) ? " spoken" : ""}${unreadSet.has(e.seq) ? " unread" : ""}`;
               const t = document.createElement("span");
               t.className = "al-time";
               t.textContent = new Date(e.ts).toTimeString().slice(0, 8);
@@ -185,11 +258,13 @@ export default {
         "List buffered activity entries (same hub stream the orchestrator shows). narrated marks entries actually spoken.",
       triggers: { ko: "활동 로그 목록 조회" },
       params: { limit: { type: "number", description: "max entries (default 20)", required: false } },
-      returns: "{ ok, entries: [{seq, ts, kind, text, tts, narrated}] }",
+      returns: "{ ok, cursor, unreadCount, entries: [{seq, ts, kind, text, tts, narrated, unread}] }",
       handler: (p: Record<string, unknown>) => {
         const limit = typeof p.limit === "number" ? Math.max(1, p.limit) : 20;
         return {
           ok: true,
+          cursor,
+          unreadCount: unreadEntries().length,
           entries: buf.slice(-limit).map((e) => ({
             seq: e.seq,
             ts: e.ts,
@@ -197,6 +272,7 @@ export default {
             text: lineOf(e),
             tts: ttsOf(e, ko),
             narrated: narrated.has(e.seq),
+            unread: e.seq > cursor && ttsOf(e, ko) !== null,
           })),
         };
       },
