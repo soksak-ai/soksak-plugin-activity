@@ -8,7 +8,8 @@
     "build": "node build.mjs",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "prepublishOnly": "node build.mjs && npx --yes soksak-plugin-doctor ."
+    "prepublishOnly": "node build.mjs && npx --yes soksak-plugin-doctor .",
+    "test-unit": "npm run typecheck && vitest run"
   },
   "devDependencies": {
     "@types/node": "^24.10.1",
