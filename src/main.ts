@@ -289,6 +289,10 @@ export default {
           key: "vtube",
           value: next,
         });
+        // 직접 구동 — settings.onChange 중계에 의존하지 않는다(이 창은 즉시 확정, 타 창은 onChange).
+        await app.commands.execute(VT + "mascot.toggle", { on: next }).catch(() => {});
+        if (next) drainUnread();
+        notify();
         return { ok: true, vtube: next };
       },
     });

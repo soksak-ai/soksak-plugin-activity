@@ -253,6 +253,10 @@ var main_default = {
           key: "vtube",
           value: next
         });
+        await app.commands.execute(VT + "mascot.toggle", { on: next }).catch(() => {
+        });
+        if (next) drainUnread();
+        notify();
         return { ok: true, vtube: next };
       }
     });
