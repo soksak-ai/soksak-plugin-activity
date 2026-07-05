@@ -244,6 +244,8 @@ export default {
 .al-row.set { padding-left:14px; border-left:2px solid rgba(255,207,92,.35); }
 /* 시스템 유래(§5 — 스케줄러·부팅 부산물) — 기록은 보이되 흐림. */
 .al-row.sys { opacity:.38; }
+/* 발화자 배지(§5 R3, 오케스트레이터 동형 칩). */
+.al-actor { display:inline-block; margin-left:5px; padding:0 5px; border-radius:7px; font-size:9px; line-height:13px; vertical-align:middle; border:1px solid rgba(255,255,255,.22); background:rgba(255,255,255,.08); }
 .al-row.spoken .al-time::after { content:"🔊"; margin-left:2px; }
 .al-row.unread .al-text { color:#ffe9a8; }
 .al-row.unread .al-time::before { content:"●"; color:#ffcf5c; margin-right:3px; }
@@ -288,8 +290,14 @@ export default {
               row.className = `al-row k-${e.kind.split(".").join("-")}${narrated.has(e.seq) ? " spoken" : ""}${unreadSet.has(e.seq) ? " unread" : ""}${isSetMember(e) ? " set" : ""}${typeof e.payload.origin === "string" && e.payload.origin ? " sys" : ""}`;
               const t = document.createElement("span");
               t.className = "al-time";
+              t.textContent = new Date(e.ts).toTimeString().slice(0, 8);
               const actor = actorOf(e, ko);
-              t.textContent = new Date(e.ts).toTimeString().slice(0, 8) + (actor ? ` ·${actor}` : "");
+              if (actor) {
+                const chip = document.createElement("span");
+                chip.className = "al-actor";
+                chip.textContent = actor;
+                t.appendChild(chip);
+              }
               const x = document.createElement("span");
               x.className = "al-text";
               x.textContent = lineOf(e);

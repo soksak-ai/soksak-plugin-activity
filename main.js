@@ -46,14 +46,20 @@ function mediaOf(e) {
 function isSetMember(e) {
   return typeof e.payload.parentId === "string" && e.payload.parentId !== "";
 }
+var ACTOR_LABELS = {
+  schedule: { en: "schedule", ko: "\uC2A4\uCF00\uC904" },
+  internal: { en: "internal", ko: "\uB0B4\uBD80" },
+  remote: { en: "remote", ko: "\uC6D0\uACA9" },
+  terminal: { en: "terminal", ko: "\uD130\uBBF8\uB110" },
+  plugin: { en: "plugin", ko: "\uD50C\uB7EC\uADF8\uC778" }
+};
+var HUMAN_SOURCES = /* @__PURE__ */ new Set(["ui", "orchestrator"]);
 function actorOf(e, ko) {
   const origin = typeof e.payload.origin === "string" ? e.payload.origin : "";
-  if (origin === "schedule") return ko ? "\uC2A4\uCF00\uC904" : "schedule";
-  if (origin === "internal") return ko ? "\uB0B4\uBD80" : "internal";
-  if (origin) return origin;
-  if (e.source === "remote") return ko ? "\uC6D0\uACA9" : "remote";
-  if (e.source === "terminal") return ko ? "\uD130\uBBF8\uB110" : "terminal";
-  return "";
+  const key = origin || (HUMAN_SOURCES.has(e.source) ? "" : e.source);
+  if (!key) return "";
+  const l = ACTOR_LABELS[key];
+  return l ? ko ? l.ko : l.en : key;
 }
 function ttsOf(e, ko) {
   const t = e.payload.tts;
@@ -229,6 +235,8 @@ var main_default = {
 .al-row.set { padding-left:14px; border-left:2px solid rgba(255,207,92,.35); }
 /* \uC2DC\uC2A4\uD15C \uC720\uB798(\xA75 \u2014 \uC2A4\uCF00\uC904\uB7EC\xB7\uBD80\uD305 \uBD80\uC0B0\uBB3C) \u2014 \uAE30\uB85D\uC740 \uBCF4\uC774\uB418 \uD750\uB9BC. */
 .al-row.sys { opacity:.38; }
+/* \uBC1C\uD654\uC790 \uBC30\uC9C0(\xA75 R3, \uC624\uCF00\uC2A4\uD2B8\uB808\uC774\uD130 \uB3D9\uD615 \uCE69). */
+.al-actor { display:inline-block; margin-left:5px; padding:0 5px; border-radius:7px; font-size:9px; line-height:13px; vertical-align:middle; border:1px solid rgba(255,255,255,.22); background:rgba(255,255,255,.08); }
 .al-row.spoken .al-time::after { content:"\u{1F50A}"; margin-left:2px; }
 .al-row.unread .al-text { color:#ffe9a8; }
 .al-row.unread .al-time::before { content:"\u25CF"; color:#ffcf5c; margin-right:3px; }
@@ -269,8 +277,14 @@ var main_default = {
               row.className = `al-row k-${e.kind.split(".").join("-")}${narrated.has(e.seq) ? " spoken" : ""}${unreadSet.has(e.seq) ? " unread" : ""}${isSetMember(e) ? " set" : ""}${typeof e.payload.origin === "string" && e.payload.origin ? " sys" : ""}`;
               const t = document.createElement("span");
               t.className = "al-time";
+              t.textContent = new Date(e.ts).toTimeString().slice(0, 8);
               const actor = actorOf(e, ko);
-              t.textContent = new Date(e.ts).toTimeString().slice(0, 8) + (actor ? ` \xB7${actor}` : "");
+              if (actor) {
+                const chip = document.createElement("span");
+                chip.className = "al-actor";
+                chip.textContent = actor;
+                t.appendChild(chip);
+              }
               const x = document.createElement("span");
               x.className = "al-text";
               x.textContent = lineOf(e);

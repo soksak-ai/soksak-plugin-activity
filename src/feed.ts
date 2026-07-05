@@ -65,16 +65,24 @@ export function isSetMember(e: ActivityEntry): boolean {
   return typeof e.payload.parentId === "string" && e.payload.parentId !== "";
 }
 
-/** 발화자 라벨(§5 R3, 오케스트레이터 동형) — origin 우선(스케줄·내부), 없으면 유래 소스
- *  (remote=에이전트/CLI, terminal). 사람 손(ui)·오케 콘솔은 라벨 없음(행 자체가 사람의 것). */
+// 발화자 라벨 사전(§5 R3) — 선언적 {en,ko} 해소(플러그인 i18n 규칙). 키 추가 = 여기 1줄.
+const ACTOR_LABELS: Record<string, { en: string; ko: string }> = {
+  schedule: { en: "schedule", ko: "스케줄" },
+  internal: { en: "internal", ko: "내부" },
+  remote: { en: "remote", ko: "원격" },
+  terminal: { en: "terminal", ko: "터미널" },
+  plugin: { en: "plugin", ko: "플러그인" },
+};
+// 사람 손의 소스 — 무배지(행의 주인이 곧 사람). 오케스트레이터 actorKeyOf 와 동형 단일 규칙.
+const HUMAN_SOURCES = new Set(["ui", "orchestrator"]);
+
+/** 발화자 라벨(오케스트레이터 동형) — origin 우선, 없으면 비인간 소스가 곧 키. "" = 사람. */
 export function actorOf(e: ActivityEntry, ko: boolean): string {
   const origin = typeof e.payload.origin === "string" ? e.payload.origin : "";
-  if (origin === "schedule") return ko ? "스케줄" : "schedule";
-  if (origin === "internal") return ko ? "내부" : "internal";
-  if (origin) return origin;
-  if (e.source === "remote") return ko ? "원격" : "remote";
-  if (e.source === "terminal") return ko ? "터미널" : "terminal";
-  return "";
+  const key = origin || (HUMAN_SOURCES.has(e.source) ? "" : e.source);
+  if (!key) return "";
+  const l = ACTOR_LABELS[key];
+  return l ? (ko ? l.ko : l.en) : key;
 }
 
 /** 낭독 문장 — payload.tts 문자열은 그대로, true 는 종류별 합성, 그 외 null(침묵). */
