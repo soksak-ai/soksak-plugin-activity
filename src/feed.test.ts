@@ -1,6 +1,6 @@
 // 피드 순수부 테스트 — 버퍼 규율(중복·정렬·상한)과 낭독 스펙 준수.
 import { describe, expect, it } from "vitest";
-import { BUFFER_CAP, insertEntry, lineOf, ttsOf, type ActivityEntry } from "./feed";
+import { BUFFER_CAP, insertEntry, isSetMember, lineOf, ttsOf, type ActivityEntry } from "./feed";
 
 const e = (seq: number, kind = "command.executed", payload: Record<string, unknown> = {}): ActivityEntry => ({
   seq,
@@ -51,5 +51,21 @@ describe("lineOf", () => {
   it("command.executed 는 오케스트레이터와 동형 요약", () => {
     const line = lineOf(e(1, "command.executed", { command: "x", ok: true, durationMs: 3, message: "done" }));
     expect(line).toBe("x ✓ (3ms) → done");
+  });
+  it("대화 세트(chat.*) — 질문·답변을 표시하되 tts 는 없다(자동 침묵)", () => {
+    const prompt = e(1, "chat.prompt", { text: "창 알려줘", turnId: "t1" });
+    const answer = e(2, "chat.answer", { text: "3개 열려 있어요", parentId: "t1" });
+    expect(lineOf(prompt)).toBe("💬 창 알려줘");
+    expect(lineOf(answer)).toBe("↩ 3개 열려 있어요");
+    expect(ttsOf(prompt, true)).toBeNull();
+    expect(ttsOf(answer, true)).toBeNull();
+  });
+});
+
+describe("isSetMember — parentId 들여쓰기 마커", () => {
+  it("payload.parentId 보유 엔트리만 세트 구성원", () => {
+    expect(isSetMember(e(1, "command.executed", { parentId: "t1" }))).toBe(true);
+    expect(isSetMember(e(2, "chat.prompt", { turnId: "t1" }))).toBe(false);
+    expect(isSetMember(e(3, "command.executed", {}))).toBe(false);
   });
 });

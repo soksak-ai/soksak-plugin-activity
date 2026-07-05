@@ -38,9 +38,20 @@ export function lineOf(e: ActivityEntry): string {
       return `턴 종료${p.agentKind ? ` (${p.agentKind})` : ""}${p.command ? ` — ${p.command}` : ""}`;
     case "view.activated":
       return `뷰 활성화 ${p.viewId}`;
+    // 오케스트레이터 대화 세트(parentId 상관) — 사이드바는 flat 이므로 세트 구성원은
+    // isSetMember 들여쓰기 마커로 묶임을 보인다. tts 는 어느 쪽에도 없다(자동 침묵).
+    case "chat.prompt":
+      return `💬 ${p.text ?? ""}`;
+    case "chat.answer":
+      return `↩ ${p.text ?? ""}`;
     default:
       return e.kind;
   }
+}
+
+/** 대화 세트 구성원(payload.parentId 보유) — flat 사이드바의 들여쓰기 마커 대상. */
+export function isSetMember(e: ActivityEntry): boolean {
+  return typeof e.payload.parentId === "string" && e.payload.parentId !== "";
 }
 
 /** 낭독 문장 — payload.tts 문자열은 그대로, true 는 종류별 합성, 그 외 null(침묵). */

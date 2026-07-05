@@ -24,9 +24,18 @@ function lineOf(e) {
       return `\uD134 \uC885\uB8CC${p.agentKind ? ` (${p.agentKind})` : ""}${p.command ? ` \u2014 ${p.command}` : ""}`;
     case "view.activated":
       return `\uBDF0 \uD65C\uC131\uD654 ${p.viewId}`;
+    // 오케스트레이터 대화 세트(parentId 상관) — 사이드바는 flat 이므로 세트 구성원은
+    // isSetMember 들여쓰기 마커로 묶임을 보인다. tts 는 어느 쪽에도 없다(자동 침묵).
+    case "chat.prompt":
+      return `\u{1F4AC} ${p.text ?? ""}`;
+    case "chat.answer":
+      return `\u21A9 ${p.text ?? ""}`;
     default:
       return e.kind;
   }
+}
+function isSetMember(e) {
+  return typeof e.payload.parentId === "string" && e.payload.parentId !== "";
 }
 function ttsOf(e, ko) {
   const t = e.payload.tts;
@@ -186,6 +195,10 @@ var main_default = {
 .al-row.k-command-executed .al-text { color:#cfd8ff; }
 .al-row.k-terminal-command-finished .al-text { color:#bfe3bf; }
 .al-row.k-turn-ended .al-text { color:#e8c8d8; }
+.al-row.k-chat-prompt .al-text { color:#ffd9a8; font-weight:600; }
+.al-row.k-chat-answer .al-text { color:#ffd9a8; }
+/* \uB300\uD654 \uC138\uD2B8 \uAD6C\uC131\uC6D0(parentId) \u2014 flat \uB85C\uADF8\uC758 \uB4E4\uC5EC\uC4F0\uAE30 \uB9C8\uCEE4(\uC624\uCF00\uC2A4\uD2B8\uB808\uC774\uD130 \uCE74\uB4DC\uC640 \uAC19\uC740 \uBB36\uC74C). */
+.al-row.set { padding-left:14px; border-left:2px solid rgba(255,207,92,.35); }
 .al-row.spoken .al-time::after { content:"\u{1F50A}"; margin-left:2px; }
 .al-row.unread .al-text { color:#ffe9a8; }
 .al-row.unread .al-time::before { content:"\u25CF"; color:#ffcf5c; margin-right:3px; }
@@ -221,7 +234,7 @@ var main_default = {
             viewCtx.setBadge?.(unreadSet.size > 0 ? unreadSet.size : null);
             for (const e of buf) {
               const row = document.createElement("div");
-              row.className = `al-row k-${e.kind.split(".").join("-")}${narrated.has(e.seq) ? " spoken" : ""}${unreadSet.has(e.seq) ? " unread" : ""}`;
+              row.className = `al-row k-${e.kind.split(".").join("-")}${narrated.has(e.seq) ? " spoken" : ""}${unreadSet.has(e.seq) ? " unread" : ""}${isSetMember(e) ? " set" : ""}`;
               const t = document.createElement("span");
               t.className = "al-time";
               t.textContent = new Date(e.ts).toTimeString().slice(0, 8);

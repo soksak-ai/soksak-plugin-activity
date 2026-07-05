@@ -7,7 +7,7 @@
 //   낭독 자격 = 낭독자 OR 타겟된 창(엔트리가 이 창에서 발생 — relay ownWindow). 자격 없는
 //   도착분은 "안 읽음" 적립, 낭독자가 되면 소화하되 백로그 3개 초과면 마지막 3개만 읽고
 //   전체 읽음 처리(커서 일괄 전진 — 밀린 독백 방지). say 는 spec tts:false 라 되먹임 불가.
-import { BUFFER_CAP, insertEntry, lineOf, ttsOf, type ActivityEntry } from "./feed";
+import { BUFFER_CAP, insertEntry, isSetMember, lineOf, ttsOf, type ActivityEntry } from "./feed";
 
 interface Disposable {
   dispose(): void;
@@ -220,6 +220,10 @@ export default {
 .al-row.k-command-executed .al-text { color:#cfd8ff; }
 .al-row.k-terminal-command-finished .al-text { color:#bfe3bf; }
 .al-row.k-turn-ended .al-text { color:#e8c8d8; }
+.al-row.k-chat-prompt .al-text { color:#ffd9a8; font-weight:600; }
+.al-row.k-chat-answer .al-text { color:#ffd9a8; }
+/* 대화 세트 구성원(parentId) — flat 로그의 들여쓰기 마커(오케스트레이터 카드와 같은 묶음). */
+.al-row.set { padding-left:14px; border-left:2px solid rgba(255,207,92,.35); }
 .al-row.spoken .al-time::after { content:"🔊"; margin-left:2px; }
 .al-row.unread .al-text { color:#ffe9a8; }
 .al-row.unread .al-time::before { content:"●"; color:#ffcf5c; margin-right:3px; }
@@ -259,7 +263,7 @@ export default {
             viewCtx.setBadge?.(unreadSet.size > 0 ? unreadSet.size : null);
             for (const e of buf) {
               const row = document.createElement("div");
-              row.className = `al-row k-${e.kind.split(".").join("-")}${narrated.has(e.seq) ? " spoken" : ""}${unreadSet.has(e.seq) ? " unread" : ""}`;
+              row.className = `al-row k-${e.kind.split(".").join("-")}${narrated.has(e.seq) ? " spoken" : ""}${unreadSet.has(e.seq) ? " unread" : ""}${isSetMember(e) ? " set" : ""}`;
               const t = document.createElement("span");
               t.className = "al-time";
               t.textContent = new Date(e.ts).toTimeString().slice(0, 8);
