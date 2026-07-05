@@ -63,10 +63,22 @@ var main_default = {
     if (app.data?.kv.watch)
       ctx.subscriptions.push(
         app.data.kv.watch((key) => {
-          if (key !== CURSOR_KEY) return;
-          void app.data.kv.get(CURSOR_KEY).then((v) => {
-            if (typeof v === "number" && v > cursor) cursor = v;
-          });
+          if (key === CURSOR_KEY) {
+            void app.data.kv.get(CURSOR_KEY).then((v) => {
+              if (typeof v === "number" && v > cursor) cursor = v;
+            });
+          } else if (key === NARRATOR_KEY) {
+            void app.data.kv.get(NARRATOR_KEY).then((v) => {
+              isNarrator = v === myId;
+            });
+          } else if (key === VTUBE_KEY) {
+            void app.data.kv.get(VTUBE_KEY).then((v) => {
+              vtube = v !== false;
+              syncMascot();
+              if (vtube) drainUnread();
+              notify();
+            });
+          }
         })
       );
     const advanceCursor = (seq) => {
@@ -76,13 +88,26 @@ var main_default = {
       });
       return true;
     };
-    const vtubeOn = () => app.settings.get("vtube") !== false;
-    let focused = typeof document !== "undefined" ? document.hasFocus() : true;
+    const VTUBE_KEY = "vtube";
+    let vtube = true;
+    const vtubeOn = () => vtube;
+    void app.data?.kv.get(VTUBE_KEY).then((v) => {
+      if (v === false) vtube = false;
+      notify();
+    });
+    const NARRATOR_KEY = "narrator";
+    const myId = (globalThis.crypto?.randomUUID?.() ?? String(Math.random())).slice(0, 12);
+    let isNarrator = false;
+    const claimNarrator = () => {
+      isNarrator = true;
+      void app.data?.kv.set(NARRATOR_KEY, myId).catch(() => {
+      });
+    };
     const notify = () => {
       for (const fn of viewListeners) fn();
     };
-    const narrate = (e) => {
-      if (!vtubeOn() || !cursorReady || !focused) return;
+    const narrate = (e, own = false) => {
+      if (!vtubeOn() || !cursorReady || !(isNarrator || own)) return;
       const text = ttsOf(e, ko);
       if (!text) return;
       if (!advanceCursor(e.seq)) return;
@@ -96,26 +121,36 @@ var main_default = {
     };
     const unreadEntries = () => buf.filter((e) => e.seq > cursor && ttsOf(e, ko) !== null);
     const drainUnread = () => {
-      if (!vtubeOn() || !cursorReady || !focused) return;
-      for (const e of unreadEntries()) narrate(e);
+      if (!vtubeOn() || !cursorReady || !isNarrator) return;
+      const u = unreadEntries();
+      if (u.length > 3) advanceCursor(u[u.length - 4].seq);
+      for (const e of u.slice(-3)) narrate(e);
       notify();
     };
     ctx.subscriptions.push(
       app.events.on("app.focus", (p) => {
-        focused = p.focused === true;
-        if (focused) drainUnread();
+        if (p.focused === true) {
+          claimNarrator();
+          drainUnread();
+        }
         notify();
       })
     );
-    const ingest = (e, live) => {
+    if (typeof document !== "undefined" && document.hasFocus()) claimNarrator();
+    else
+      void app.data?.kv.get(NARRATOR_KEY).then((v) => {
+        if (v == null) claimNarrator();
+        else isNarrator = v === myId;
+      });
+    const ingest = (e, live, own = false) => {
       if (!insertEntry(buf, e)) return;
-      if (live) narrate(e);
+      if (live) narrate(e, own);
       notify();
     };
     ctx.subscriptions.push(
       app.events.on("activity", (e) => {
-        const { ownWindow: _own, ...entry } = e;
-        ingest(entry, true);
+        const { ownWindow, ...entry } = e;
+        ingest(entry, true, ownWindow === true);
       })
     );
     void Promise.resolve(loadCursor).then(
@@ -131,11 +166,6 @@ var main_default = {
       void app.commands.execute(VT + "mascot.toggle", { on: vtubeOn() }).catch(() => {
       });
     };
-    ctx.subscriptions.push(app.settings.onChange(() => {
-      syncMascot();
-      drainUnread();
-      notify();
-    }));
     syncMascot();
     ctx.subscriptions.push(
       app.ui.registerView("log", {
@@ -230,6 +260,8 @@ var main_default = {
           ok: true,
           cursor,
           unreadCount: unreadEntries().length,
+          // 진단 — 이 응답을 만든 인스턴스의 시야(창별 상태 어긋남 추적)
+          me: { id: myId, narrator: isNarrator, vtube: vtubeOn() },
           entries: buf.slice(-limit).map((e) => ({
             seq: e.seq,
             ts: e.ts,
@@ -243,15 +275,16 @@ var main_default = {
       }
     });
     reg("vtube.toggle", {
+      tts: false,
+      // 낭독 제어 계열 — 자기 조작 무낭독
       description: "Toggle character narration + mascot (persists via the vtube setting).",
       triggers: { ko: "\uBE0C\uC774\uD29C\uBE0C \uB0AD\uB3C5 \uB9C8\uC2A4\uCF54\uD2B8 \uCF1C\uAE30 \uB044\uAE30" },
       params: { on: { type: "boolean", description: "explicit state; omit to flip", required: false } },
       handler: async (p) => {
         const next = typeof p.on === "boolean" ? p.on : !vtubeOn();
-        await app.commands.execute("plugin.settings.set", {
-          id: "soksak-plugin-activity",
-          key: "vtube",
-          value: next
+        vtube = next;
+        claimNarrator();
+        await app.data?.kv.set(VTUBE_KEY, next).catch(() => {
         });
         await app.commands.execute(VT + "mascot.toggle", { on: next }).catch(() => {
         });

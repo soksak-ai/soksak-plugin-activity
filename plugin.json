@@ -21,21 +21,6 @@
   "dependencies": {
     "soksak-plugin-vtube-tts": "^1.0.0"
   },
-  "configuration": [
-    {
-      "key": "vtube",
-      "type": "boolean",
-      "default": true,
-      "title": {
-        "en": "VTube narration",
-        "ko": "브이튜브 낭독"
-      },
-      "description": {
-        "en": "On: the character (mascot) appears and reads tts entries aloud in arrival order. Off: text log only.",
-        "ko": "켬: 캐릭터(마스코트)가 나타나 tts 엔트리를 도착 순서대로 읽는다. 끔: 텍스트 로그만."
-      }
-    }
-  ],
   "contributes": {
     "views": [
       {

@@ -1,9 +1,12 @@
 // soksak-plugin-activity — 프로젝트 창 사이드바의 활동로그(허브 전체 스트림) + vtube 낭독.
 // 데이터: 백필 activity.recent 1회 + 라이브 app.events.on("activity") — 폴링 0, 필터 없음
 // (오케스트레이터 피드와 동일 내용이 수용 기준).
-// 낭독 규율: payload.tts 스펙 준수 + 읽음 커서(kv 공유) + 활성 창 단독 낭독.
-//   활성(포커스) 창만 읽는다 — 비활성 동안 도착분은 "안 읽음"으로 적립되고, 포커스를 얻으면
-//   커서 이후를 순서대로 소화한다(스킵 없음). say 는 spec tts:false 라 되먹임 불가.
+// 낭독 규율: payload.tts 스펙 준수 + 읽음 커서(kv 공유) + 낭독자 선출(단일 목소리).
+//   여러 프로젝트 창 중 "마지막으로 포커스된 창"이 낭독자(kv 클레임) — 오케스트레이터/타 앱으로
+//   포커스가 가도 낭독자는 유지된다(오케스트레이터 창은 설계상 플러그인이 없다 — P13 셸).
+//   낭독 자격 = 낭독자 OR 타겟된 창(엔트리가 이 창에서 발생 — relay ownWindow). 자격 없는
+//   도착분은 "안 읽음" 적립, 낭독자가 되면 소화하되 백로그 3개 초과면 마지막 3개만 읽고
+//   전체 읽음 처리(커서 일괄 전진 — 밀린 독백 방지). say 는 spec tts:false 라 되먹임 불가.
 import { BUFFER_CAP, insertEntry, lineOf, ttsOf, type ActivityEntry } from "./feed";
 
 interface Disposable {
@@ -67,10 +70,22 @@ export default {
     if (app.data?.kv.watch)
       ctx.subscriptions.push(
         app.data.kv.watch((key) => {
-          if (key !== CURSOR_KEY) return;
-          void app.data!.kv.get(CURSOR_KEY).then((v) => {
-            if (typeof v === "number" && v > cursor) cursor = v; // 다른 창이 전진 — 따라간다
-          });
+          if (key === CURSOR_KEY) {
+            void app.data!.kv.get(CURSOR_KEY).then((v) => {
+              if (typeof v === "number" && v > cursor) cursor = v; // 다른 창이 전진 — 따라간다
+            });
+          } else if (key === NARRATOR_KEY) {
+            void app.data!.kv.get(NARRATOR_KEY).then((v) => {
+              isNarrator = v === myId; // 다른 창이 클레임 — 즉시 양보(단일 목소리)
+            });
+          } else if (key === VTUBE_KEY) {
+            void app.data!.kv.get(VTUBE_KEY).then((v) => {
+              vtube = v !== false;
+              syncMascot();
+              if (vtube) drainUnread();
+              notify();
+            });
+          }
         }),
       );
     const advanceCursor = (seq: number) => {
@@ -80,9 +95,25 @@ export default {
       return true;
     };
 
-    const vtubeOn = () => app.settings.get("vtube") !== false;
-    // 활성 창 단독 낭독 — 여러 창의 인스턴스 중 포커스 창만 발화(커서 공유가 중복을 이중 차단).
-    let focused = typeof document !== "undefined" ? document.hasFocus() : true;
+    // vtube 플래그 — kv 가 단일 진실(선언형 설정 스토어는 창-로컬이라 창 간 불일치).
+    // 커서·낭독자와 동일한 동기 채널(kv watch)로 전 창이 즉시 일치한다.
+    const VTUBE_KEY = "vtube";
+    let vtube = true;
+    const vtubeOn = () => vtube;
+    void app.data?.kv.get(VTUBE_KEY).then((v) => {
+      if (v === false) vtube = false;
+      notify();
+    });
+    // 낭독자 선출 — kv "narrator" 를 포커스 획득 시 클레임. 값==내 id 인 인스턴스만 발화
+    // (커서 공유가 중복을 이중 차단). 클레임은 유지형: 앱/창 포커스를 잃어도 다른 창이
+    // 클레임하기 전까지 낭독자다(오케스트레이터 콘솔 실행도 끊김 없이 읽힌다).
+    const NARRATOR_KEY = "narrator";
+    const myId = (globalThis.crypto?.randomUUID?.() ?? String(Math.random())).slice(0, 12);
+    let isNarrator = false;
+    const claimNarrator = () => {
+      isNarrator = true;
+      void app.data?.kv.set(NARRATOR_KEY, myId).catch(() => {});
+    };
 
     const notify = () => {
       for (const fn of viewListeners) fn();
@@ -90,8 +121,9 @@ export default {
 
     // 낭독 — 스펙 준수 + 읽음 커서 + 활성 창: tts 문장이 있고 커서를 전진시킨 엔트리만 say.
     // (커서 이하 = 이미 읽음(이 창/다른 창/이전 세션) — 침묵. 몰아읽기·중복 낭독 원천 차단.)
-    const narrate = (e: ActivityEntry) => {
-      if (!vtubeOn() || !cursorReady || !focused) return;
+    const narrate = (e: ActivityEntry, own = false) => {
+      // 낭독 자격: 낭독자(마지막 활성 창) 또는 타겟된 창(이 창에서 발생한 엔트리).
+      if (!vtubeOn() || !cursorReady || !(isNarrator || own)) return;
       const text = ttsOf(e, ko);
       if (!text) return;
       if (!advanceCursor(e.seq)) return;
@@ -107,32 +139,45 @@ export default {
     /** 안 읽은 tts 엔트리(커서 초과) — 표시·배지·포커스 획득 시 소화 대상. */
     const unreadEntries = () => buf.filter((e) => e.seq > cursor && ttsOf(e, ko) !== null);
 
-    /** 밀린 안 읽음 소화 — 포커스 획득/vtube 켬 시, 커서 이후를 순서대로(스킵 없음). */
+    /** 밀린 안 읽음 소화 — 낭독자 획득/vtube 켬 시. 3개 초과 백로그는 마지막 3개만 읽고
+     *  나머지는 커서 일괄 전진으로 읽음 처리(몰아 읽기 독백 방지 — 사용자 규칙). */
     const drainUnread = () => {
-      if (!vtubeOn() || !cursorReady || !focused) return;
-      for (const e of unreadEntries()) narrate(e);
+      if (!vtubeOn() || !cursorReady || !isNarrator) return;
+      const u = unreadEntries();
+      if (u.length > 3) advanceCursor(u[u.length - 4].seq); // 마지막 3개 직전까지 읽음 처리
+      for (const e of u.slice(-3)) narrate(e);
       notify();
     };
 
+    // 포커스 획득 = 낭독자 클레임(이 창이 사용자의 현재 작업 창) + 밀린 것 소화
     ctx.subscriptions.push(
       app.events.on("app.focus", (p: { focused: boolean }) => {
-        focused = p.focused === true;
-        if (focused) drainUnread();
+        if (p.focused === true) {
+          claimNarrator();
+          drainUnread();
+        }
         notify();
       }),
     );
+    // 활성화 시점: 현재 포커스 창이면 즉시 클레임, 아니면 기존 낭독자 부재 시에만 클레임(첫 창)
+    if (typeof document !== "undefined" && document.hasFocus()) claimNarrator();
+    else
+      void app.data?.kv.get(NARRATOR_KEY).then((v) => {
+        if (v == null) claimNarrator();
+        else isNarrator = v === myId;
+      });
 
-    const ingest = (e: ActivityEntry, live: boolean) => {
+    const ingest = (e: ActivityEntry, live: boolean, own = false) => {
       if (!insertEntry(buf, e)) return;
-      if (live) narrate(e); // 백필은 과거 — 낭독하지 않는다(라이브만). 비활성/꺼짐이면 안 읽음 적립
+      if (live) narrate(e, own); // 백필은 과거 — 낭독하지 않는다(라이브만). 자격 없으면 안 읽음 적립
       notify();
     };
 
     // 라이브 — 허브 전체 스트림(창 필터 없음: 오케스트레이터와 동일 내용)
     ctx.subscriptions.push(
       app.events.on("activity", (e: ActivityEntry & { ownWindow?: boolean }) => {
-        const { ownWindow: _own, ...entry } = e;
-        ingest(entry as ActivityEntry, true);
+        const { ownWindow, ...entry } = e;
+        ingest(entry as ActivityEntry, true, ownWindow === true);
       }),
     );
 
@@ -153,11 +198,6 @@ export default {
     const syncMascot = () => {
       void app.commands.execute(VT + "mascot.toggle", { on: vtubeOn() }).catch(() => {});
     };
-    ctx.subscriptions.push(app.settings.onChange(() => {
-      syncMascot();
-      drainUnread(); // vtube 를 켰다면 안 읽음부터 소화
-      notify();
-    }));
     syncMascot();
 
     // ── 뷰 ──
@@ -265,6 +305,8 @@ export default {
           ok: true,
           cursor,
           unreadCount: unreadEntries().length,
+          // 진단 — 이 응답을 만든 인스턴스의 시야(창별 상태 어긋남 추적)
+          me: { id: myId, narrator: isNarrator, vtube: vtubeOn() },
           entries: buf.slice(-limit).map((e) => ({
             seq: e.seq,
             ts: e.ts,
@@ -279,17 +321,16 @@ export default {
     });
 
     reg("vtube.toggle", {
+      tts: false, // 낭독 제어 계열 — 자기 조작 무낭독
       description: "Toggle character narration + mascot (persists via the vtube setting).",
       triggers: { ko: "브이튜브 낭독 마스코트 켜기 끄기" },
       params: { on: { type: "boolean", description: "explicit state; omit to flip", required: false } },
       handler: async (p: Record<string, unknown>) => {
         const next = typeof p.on === "boolean" ? p.on : !vtubeOn();
-        await app.commands.execute("plugin.settings.set", {
-          id: "soksak-plugin-activity",
-          key: "vtube",
-          value: next,
-        });
-        // 직접 구동 — settings.onChange 중계에 의존하지 않는다(이 창은 즉시 확정, 타 창은 onChange).
+        vtube = next; // 이 창 즉시 확정 — 타 창은 kv watch 로 따라온다
+        // 토글이 실행된 창 = 명시적 사용자 의도 → 낭독자 클레임(리로드로 고아가 된 클레임도 회복)
+        claimNarrator();
+        await app.data?.kv.set(VTUBE_KEY, next).catch(() => {});
         await app.commands.execute(VT + "mascot.toggle", { on: next }).catch(() => {});
         if (next) drainUnread();
         notify();
