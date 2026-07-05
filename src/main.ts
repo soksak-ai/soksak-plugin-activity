@@ -1,4 +1,4 @@
-// soksak-plugin-activity — 프로젝트 창 사이드바의 활동로그(허브 전체 스트림) + vtube 낭독.
+// soksak-plugin-activity — 프로젝트 창 사이드바의 활동로그(허브 전체 스트림) + mascot 낭독.
 // 데이터: 백필 activity.recent 1회 + 라이브 app.events.on("activity") — 폴링 0, 필터 없음
 // (오케스트레이터 피드와 동일 내용이 수용 기준).
 // 낭독 규율: payload.tts 스펙 준수 + 읽음 커서(kv 공유) + 낭독자 선출(단일 목소리).
@@ -45,7 +45,7 @@ interface PluginCtx {
   subscriptions: Array<Disposable | (() => void)>;
 }
 
-const VT = "plugin.soksak-plugin-vtube-tts.";
+const VT = "plugin.soksak-plugin-mascot.";
 const VERSION = "1.0.0";
 
 export default {
@@ -55,7 +55,7 @@ export default {
     const buf: ActivityEntry[] = [];
     const narrated = new Set<number>(); // seq — list 커맨드/검증용(이 창이 읽은 것)
     const viewListeners = new Set<() => void>();
-    let vtubeWarned = false;
+    let mascotWarned = false;
     // 읽음 커서(watermark) — "어디까지 읽었는지"의 단일 진실. kv 영속 + 창 간 공유(watch)로
     // 리로드/다중 창에서 같은 엔트리를 중복 낭독하지 않는다. 커서 이하 seq 는 절대 읽지 않는다.
     const CURSOR_KEY = "narratedSeq";
@@ -85,11 +85,11 @@ export default {
               // 프로세스가 창마다 남아 메모리를 먹던 원천). 다음 자격 창이 lazy 재기동.
               if (was && !isNarrator) void app.commands.execute(VT + "release", {}, { origin: "internal" }).catch(() => {});
             });
-          } else if (key === VTUBE_KEY) {
-            void app.data!.kv.get(VTUBE_KEY).then((v) => {
-              vtube = v !== false;
+          } else if (key === MASCOT_KEY) {
+            void app.data!.kv.get(MASCOT_KEY).then((v) => {
+              mascot = v !== false;
               syncMascot();
-              if (vtube) drainUnread();
+              if (mascot) drainUnread();
               else void app.commands.execute(VT + "release", {}, { origin: "internal" }).catch(() => {}); // 끔 = 자격 반납
               notify();
             });
@@ -103,13 +103,13 @@ export default {
       return true;
     };
 
-    // vtube 플래그 — kv 가 단일 진실(선언형 설정 스토어는 창-로컬이라 창 간 불일치).
+    // mascot 플래그 — kv 가 단일 진실(선언형 설정 스토어는 창-로컬이라 창 간 불일치).
     // 커서·낭독자와 동일한 동기 채널(kv watch)로 전 창이 즉시 일치한다.
-    const VTUBE_KEY = "vtube";
-    let vtube = true;
-    const vtubeOn = () => vtube;
-    void app.data?.kv.get(VTUBE_KEY).then((v) => {
-      if (v === false) vtube = false;
+    const MASCOT_KEY = "mascot";
+    let mascot = true;
+    const mascotOn = () => mascot;
+    void app.data?.kv.get(MASCOT_KEY).then((v) => {
+      if (v === false) mascot = false;
       notify();
     });
     // 낭독자 선출 — kv "narrator" 를 포커스 획득 시 클레임. 값==내 id 인 인스턴스만 발화
@@ -133,15 +133,15 @@ export default {
     // (오케스트레이터)에서 narrator 와 발생 창이 동시 발화하는 레이스를 만들어 폐지(실측).
     // 활성창 규칙은 포커스 시 narrator 클레임이 담당한다(작업 창 = 낭독 창).
     const narrate = (e: ActivityEntry) => {
-      if (!vtubeOn() || !cursorReady || !isNarrator) return;
+      if (!mascotOn() || !cursorReady || !isNarrator) return;
       const text = ttsOf(e, ko);
       if (!text) return;
       if (!advanceCursor(e.seq)) return;
       narrated.add(e.seq);
       void app.commands.execute(VT + "say", { text }, { origin: "internal" }).catch((err) => {
-        if (!vtubeWarned) {
-          vtubeWarned = true;
-          console.warn("[activity] vtube-tts say 실패 — 텍스트 모드로 계속:", err);
+        if (!mascotWarned) {
+          mascotWarned = true;
+          console.warn("[activity] mascot say 실패 — 텍스트 모드로 계속:", err);
         }
       });
     };
@@ -149,10 +149,10 @@ export default {
     /** 안 읽은 tts 엔트리(커서 초과) — 표시·배지·포커스 획득 시 소화 대상. */
     const unreadEntries = () => buf.filter((e) => e.seq > cursor && ttsOf(e, ko) !== null);
 
-    /** 밀린 안 읽음 소화 — 낭독자 획득/vtube 켬 시. 3개 초과 백로그는 마지막 3개만 읽고
+    /** 밀린 안 읽음 소화 — 낭독자 획득/mascot 켬 시. 3개 초과 백로그는 마지막 3개만 읽고
      *  나머지는 커서 일괄 전진으로 읽음 처리(몰아 읽기 독백 방지 — 사용자 규칙). */
     const drainUnread = () => {
-      if (!vtubeOn() || !cursorReady || !isNarrator) return;
+      if (!mascotOn() || !cursorReady || !isNarrator) return;
       const u = unreadEntries();
       if (u.length > 3) advanceCursor(u[u.length - 4].seq); // 마지막 3개 직전까지 읽음 처리
       for (const e of u.slice(-3)) narrate(e);
@@ -212,9 +212,9 @@ export default {
         .catch(() => {}),
     );
 
-    // 마스코트 동기 — vtube 토글이 캐릭터 표시까지 소유(on=등장, off=퇴장)
+    // 마스코트 동기 — mascot 토글이 캐릭터 표시까지 소유(on=등장, off=퇴장)
     const syncMascot = () => {
-      void app.commands.execute(VT + "mascot.toggle", { on: vtubeOn() }, { origin: "internal" }).catch(() => {});
+      void app.commands.execute(VT + "toggle", { on: mascotOn() }, { origin: "internal" }).catch(() => {});
     };
     syncMascot();
 
@@ -267,11 +267,11 @@ export default {
           root.append(bar, log);
 
           const renderBar = () => {
-            toggle.textContent = vtubeOn()
-              ? ko ? "브이튜브 켬" : "vtube on"
-              : ko ? "브이튜브 끔" : "vtube off";
+            toggle.textContent = mascotOn()
+              ? ko ? "브이튜브 켬" : "mascot on"
+              : ko ? "브이튜브 끔" : "mascot off";
           };
-          toggle.onclick = () => void app.commands.execute("plugin.soksak-plugin-activity.vtube.toggle", {});
+          toggle.onclick = () => void app.commands.execute("plugin.soksak-plugin-activity.mascot.toggle", {});
 
           const render = () => {
             renderBar();
@@ -358,7 +358,7 @@ export default {
           cursor,
           unreadCount: unreadEntries().length,
           // 진단 — 이 응답을 만든 인스턴스의 시야(창별 상태 어긋남 추적)
-          me: { id: myId, narrator: isNarrator, vtube: vtubeOn() },
+          me: { id: myId, narrator: isNarrator, mascot: mascotOn() },
           entries: buf.slice(-limit).map((e) => ({
             seq: e.seq,
             ts: e.ts,
@@ -372,21 +372,21 @@ export default {
       },
     });
 
-    reg("vtube.toggle", {
+    reg("mascot.toggle", {
       speak: () => "", // 낭독 제어 계열 — 자기 조작 무낭독(§3)
-      description: "Toggle character narration + mascot (persists via the vtube setting).",
+      description: "Toggle character narration + mascot (persists via the mascot setting).",
       triggers: { ko: "브이튜브 낭독 마스코트 켜기 끄기" },
       params: { on: { type: "boolean", description: "explicit state; omit to flip", required: false } },
       handler: async (p: Record<string, unknown>) => {
-        const next = typeof p.on === "boolean" ? p.on : !vtubeOn();
-        vtube = next; // 이 창 즉시 확정 — 타 창은 kv watch 로 따라온다
+        const next = typeof p.on === "boolean" ? p.on : !mascotOn();
+        mascot = next; // 이 창 즉시 확정 — 타 창은 kv watch 로 따라온다
         // 토글이 실행된 창 = 명시적 사용자 의도 → 낭독자 클레임(리로드로 고아가 된 클레임도 회복)
         claimNarrator();
-        await app.data?.kv.set(VTUBE_KEY, next).catch(() => {});
-        await app.commands.execute(VT + "mascot.toggle", { on: next }).catch(() => {});
+        await app.data?.kv.set(MASCOT_KEY, next).catch(() => {});
+        await app.commands.execute(VT + "toggle", { on: next }).catch(() => {});
         if (next) drainUnread();
         notify();
-        return { ok: true, vtube: next };
+        return { ok: true, mascot: next };
       },
     });
   },

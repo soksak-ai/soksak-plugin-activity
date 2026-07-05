@@ -74,7 +74,7 @@ function ttsOf(e, ko) {
 }
 
 // src/main.ts
-var VT = "plugin.soksak-plugin-vtube-tts.";
+var VT = "plugin.soksak-plugin-mascot.";
 var VERSION = "1.0.0";
 var main_default = {
   activate(ctx) {
@@ -83,7 +83,7 @@ var main_default = {
     const buf = [];
     const narrated = /* @__PURE__ */ new Set();
     const viewListeners = /* @__PURE__ */ new Set();
-    let vtubeWarned = false;
+    let mascotWarned = false;
     const CURSOR_KEY = "narratedSeq";
     let cursor = -1;
     let cursorReady = false;
@@ -107,11 +107,11 @@ var main_default = {
               if (was && !isNarrator) void app.commands.execute(VT + "release", {}, { origin: "internal" }).catch(() => {
               });
             });
-          } else if (key === VTUBE_KEY) {
-            void app.data.kv.get(VTUBE_KEY).then((v) => {
-              vtube = v !== false;
+          } else if (key === MASCOT_KEY) {
+            void app.data.kv.get(MASCOT_KEY).then((v) => {
+              mascot = v !== false;
               syncMascot();
-              if (vtube) drainUnread();
+              if (mascot) drainUnread();
               else void app.commands.execute(VT + "release", {}, { origin: "internal" }).catch(() => {
               });
               notify();
@@ -126,11 +126,11 @@ var main_default = {
       });
       return true;
     };
-    const VTUBE_KEY = "vtube";
-    let vtube = true;
-    const vtubeOn = () => vtube;
-    void app.data?.kv.get(VTUBE_KEY).then((v) => {
-      if (v === false) vtube = false;
+    const MASCOT_KEY = "mascot";
+    let mascot = true;
+    const mascotOn = () => mascot;
+    void app.data?.kv.get(MASCOT_KEY).then((v) => {
+      if (v === false) mascot = false;
       notify();
     });
     const NARRATOR_KEY = "narrator";
@@ -145,21 +145,21 @@ var main_default = {
       for (const fn of viewListeners) fn();
     };
     const narrate = (e) => {
-      if (!vtubeOn() || !cursorReady || !isNarrator) return;
+      if (!mascotOn() || !cursorReady || !isNarrator) return;
       const text = ttsOf(e, ko);
       if (!text) return;
       if (!advanceCursor(e.seq)) return;
       narrated.add(e.seq);
       void app.commands.execute(VT + "say", { text }, { origin: "internal" }).catch((err) => {
-        if (!vtubeWarned) {
-          vtubeWarned = true;
-          console.warn("[activity] vtube-tts say \uC2E4\uD328 \u2014 \uD14D\uC2A4\uD2B8 \uBAA8\uB4DC\uB85C \uACC4\uC18D:", err);
+        if (!mascotWarned) {
+          mascotWarned = true;
+          console.warn("[activity] mascot say \uC2E4\uD328 \u2014 \uD14D\uC2A4\uD2B8 \uBAA8\uB4DC\uB85C \uACC4\uC18D:", err);
         }
       });
     };
     const unreadEntries = () => buf.filter((e) => e.seq > cursor && ttsOf(e, ko) !== null);
     const drainUnread = () => {
-      if (!vtubeOn() || !cursorReady || !isNarrator) return;
+      if (!mascotOn() || !cursorReady || !isNarrator) return;
       const u = unreadEntries();
       if (u.length > 3) advanceCursor(u[u.length - 4].seq);
       for (const e of u.slice(-3)) narrate(e);
@@ -206,7 +206,7 @@ var main_default = {
       })
     );
     const syncMascot = () => {
-      void app.commands.execute(VT + "mascot.toggle", { on: vtubeOn() }, { origin: "internal" }).catch(() => {
+      void app.commands.execute(VT + "toggle", { on: mascotOn() }, { origin: "internal" }).catch(() => {
       });
     };
     syncMascot();
@@ -257,9 +257,9 @@ var main_default = {
           log.className = "al-log";
           root.append(bar, log);
           const renderBar = () => {
-            toggle.textContent = vtubeOn() ? ko ? "\uBE0C\uC774\uD29C\uBE0C \uCF2C" : "vtube on" : ko ? "\uBE0C\uC774\uD29C\uBE0C \uB054" : "vtube off";
+            toggle.textContent = mascotOn() ? ko ? "\uBE0C\uC774\uD29C\uBE0C \uCF2C" : "mascot on" : ko ? "\uBE0C\uC774\uD29C\uBE0C \uB054" : "mascot off";
           };
-          toggle.onclick = () => void app.commands.execute("plugin.soksak-plugin-activity.vtube.toggle", {});
+          toggle.onclick = () => void app.commands.execute("plugin.soksak-plugin-activity.mascot.toggle", {});
           const render = () => {
             renderBar();
             log.replaceChildren();
@@ -334,7 +334,7 @@ var main_default = {
           cursor,
           unreadCount: unreadEntries().length,
           // 진단 — 이 응답을 만든 인스턴스의 시야(창별 상태 어긋남 추적)
-          me: { id: myId, narrator: isNarrator, vtube: vtubeOn() },
+          me: { id: myId, narrator: isNarrator, mascot: mascotOn() },
           entries: buf.slice(-limit).map((e) => ({
             seq: e.seq,
             ts: e.ts,
@@ -347,23 +347,23 @@ var main_default = {
         };
       }
     });
-    reg("vtube.toggle", {
+    reg("mascot.toggle", {
       speak: () => "",
       // 낭독 제어 계열 — 자기 조작 무낭독(§3)
-      description: "Toggle character narration + mascot (persists via the vtube setting).",
+      description: "Toggle character narration + mascot (persists via the mascot setting).",
       triggers: { ko: "\uBE0C\uC774\uD29C\uBE0C \uB0AD\uB3C5 \uB9C8\uC2A4\uCF54\uD2B8 \uCF1C\uAE30 \uB044\uAE30" },
       params: { on: { type: "boolean", description: "explicit state; omit to flip", required: false } },
       handler: async (p) => {
-        const next = typeof p.on === "boolean" ? p.on : !vtubeOn();
-        vtube = next;
+        const next = typeof p.on === "boolean" ? p.on : !mascotOn();
+        mascot = next;
         claimNarrator();
-        await app.data?.kv.set(VTUBE_KEY, next).catch(() => {
+        await app.data?.kv.set(MASCOT_KEY, next).catch(() => {
         });
-        await app.commands.execute(VT + "mascot.toggle", { on: next }).catch(() => {
+        await app.commands.execute(VT + "toggle", { on: next }).catch(() => {
         });
         if (next) drainUnread();
         notify();
-        return { ok: true, vtube: next };
+        return { ok: true, mascot: next };
       }
     });
   }

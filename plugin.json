@@ -8,8 +8,8 @@
   "version": "0.0.1",
   "repo": "https://github.com/soksak-ai/soksak-plugin-activity.git",
   "description": {
-    "en": "The activity log in a project-window sidebar — the same hub stream the orchestrator feed shows. Entries whose spec carries tts are read aloud by the vtube-tts character (toggleable).",
-    "ko": "프로젝트 창 사이드바의 활동로그 — 오케스트레이터 피드와 동일한 허브 스트림. 스펙에 tts가 실린 엔트리는 vtube-tts 캐릭터가 소리 내어 읽는다(토글 가능)."
+    "en": "The activity log in a project-window sidebar — the same hub stream the orchestrator feed shows. Entries whose spec carries tts are read aloud by the mascot (toggleable).",
+    "ko": "프로젝트 창 사이드바의 활동로그 — 오케스트레이터 피드와 동일한 허브 스트림. 스펙에 tts가 실린 엔트리는 마스코트가 소리 내어 읽는다(토글 가능)."
   },
   "entry": "main.js",
   "permissions": [
@@ -20,7 +20,7 @@
     "fs:read"
   ],
   "dependencies": {
-    "soksak-plugin-vtube-tts": "^1.0.0"
+    "soksak-plugin-mascot": "^1.0.0"
   },
   "contributes": {
     "views": [
@@ -54,7 +54,7 @@
         }
       },
       {
-        "name": "vtube.toggle",
+        "name": "mascot.toggle",
         "title": {
           "en": "Toggles character narration",
           "ko": "캐릭터 낭독을 켜고 끕니다"
