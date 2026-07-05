@@ -364,6 +364,7 @@ var main_default = {
     reg("ping", {
       description: "Health check \u2014 plugin load/version probe (E2E).",
       triggers: { ko: "\uD65C\uB3D9 \uD50C\uB7EC\uADF8\uC778 \uC0C1\uD0DC \uC810\uAC80 \uD551" },
+      message: (d) => `\uD65C\uB3D9 \uD50C\uB7EC\uADF8\uC778 v${d.version}\uC774 \uC0B4\uC544\uC788\uC2B5\uB2C8\uB2E4.`,
       handler: () => ({ ok: true, plugin: "soksak-plugin-activity", version: VERSION })
     });
     reg("list", {
@@ -371,6 +372,7 @@ var main_default = {
       triggers: { ko: "\uD65C\uB3D9 \uB85C\uADF8 \uBAA9\uB85D \uC870\uD68C" },
       params: { limit: { type: "number", description: "max entries (default 20)", required: false } },
       returns: "{ ok, cursor, unreadCount, entries: [{seq, ts, kind, text, tts, narrated, unread}] }",
+      message: (d) => `\uD65C\uB3D9 ${(d.entries ?? []).length}\uAC1C (\uC548 \uC77D\uC74C ${d.unreadCount ?? 0}\uAC1C).`,
       handler: (p) => {
         const limit = typeof p.limit === "number" ? Math.max(1, p.limit) : 20;
         return {
@@ -396,6 +398,7 @@ var main_default = {
       // 낭독 제어 계열 — 자기 조작 무낭독(§3)
       description: "Toggle character narration + mascot (persists via the mascot setting).",
       triggers: { ko: "\uBE0C\uC774\uD29C\uBE0C \uB0AD\uB3C5 \uB9C8\uC2A4\uCF54\uD2B8 \uCF1C\uAE30 \uB044\uAE30" },
+      message: (d) => d.mascot ? "\uB0AD\uB3C5\uC744 \uCF30\uC2B5\uB2C8\uB2E4." : "\uB0AD\uB3C5\uC744 \uAED0\uC2B5\uB2C8\uB2E4.",
       params: { on: { type: "boolean", description: "explicit state; omit to flip", required: false } },
       handler: async (p) => {
         const next = typeof p.on === "boolean" ? p.on : !mascotOn();

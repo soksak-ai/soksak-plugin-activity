@@ -400,6 +400,7 @@ export default {
     reg("ping", {
       description: "Health check — plugin load/version probe (E2E).",
       triggers: { ko: "활동 플러그인 상태 점검 핑" },
+      message: (d: any) => `활동 플러그인 v${d.version}이 살아있습니다.`,
       handler: () => ({ ok: true, plugin: "soksak-plugin-activity", version: VERSION }),
     });
 
@@ -409,6 +410,7 @@ export default {
       triggers: { ko: "활동 로그 목록 조회" },
       params: { limit: { type: "number", description: "max entries (default 20)", required: false } },
       returns: "{ ok, cursor, unreadCount, entries: [{seq, ts, kind, text, tts, narrated, unread}] }",
+      message: (d: any) => `활동 ${(d.entries ?? []).length}개 (안 읽음 ${d.unreadCount ?? 0}개).`,
       handler: (p: Record<string, unknown>) => {
         const limit = typeof p.limit === "number" ? Math.max(1, p.limit) : 20;
         return {
@@ -434,6 +436,7 @@ export default {
       speak: () => "", // 낭독 제어 계열 — 자기 조작 무낭독(§3)
       description: "Toggle character narration + mascot (persists via the mascot setting).",
       triggers: { ko: "브이튜브 낭독 마스코트 켜기 끄기" },
+      message: (d: any) => (d.mascot ? "낭독을 켰습니다." : "낭독을 껐습니다."),
       params: { on: { type: "boolean", description: "explicit state; omit to flip", required: false } },
       handler: async (p: Record<string, unknown>) => {
         const next = typeof p.on === "boolean" ? p.on : !mascotOn();

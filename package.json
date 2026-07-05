@@ -7,7 +7,8 @@
   "scripts": {
     "build": "node build.mjs",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "node build.mjs && npx --yes soksak-plugin-doctor ."
   },
   "devDependencies": {
     "@types/node": "^24.10.1",
