@@ -238,6 +238,11 @@ export default {
 .al-bar { display:flex; gap:6px; padding:6px 8px; border-bottom:1px solid rgba(255,255,255,.08); align-items:center; }
 .al-btn { padding:3px 9px; border-radius:7px; border:1px solid rgba(255,255,255,.14); background:rgba(255,255,255,.08); color:inherit; cursor:pointer; font:inherit; font-size:11px; }
 .al-log { flex:1; overflow-y:auto; padding:6px 8px; display:flex; flex-direction:column; gap:3px; }
+/* 스크롤바 — 코어 정본(App.css 4px)과 동일: 플러그인 뷰(Shadow DOM)엔 전역 규칙이 안 들어온다. */
+.al-log::-webkit-scrollbar { -webkit-appearance:none; width:4px; height:4px; }
+.al-log::-webkit-scrollbar-track { background:transparent; }
+.al-log::-webkit-scrollbar-thumb { background:rgba(127,127,127,.22); border-radius:2px; }
+.al-log::-webkit-scrollbar-thumb:hover { background:rgba(127,127,127,.42); }
 .al-row { display:flex; gap:6px; align-items:baseline; }
 .al-time { color:#8a8a96; font-size:10px; flex:none; }
 .al-text { white-space:pre-wrap; word-break:break-all; }
