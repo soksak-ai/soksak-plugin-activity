@@ -9,32 +9,11 @@ function insertEntry(buf, e) {
 }
 function lineOf(e) {
   const p = e.payload;
-  switch (e.kind) {
-    case "command.executed": {
-      const head = `${p.command} ${p.ok ? "\u2713" : `\u2717 ${p.code ?? ""}`} (${p.durationMs}ms)`;
-      return p.message ? `${head} \u2192 ${p.message}` : head;
-    }
-    case "command.progress":
-      return `\u22EF ${p.command ? `${p.command}: ` : ""}${p.delta ?? ""}`;
-    case "terminal.command.started":
-      return `$ ${p.commandLine}`;
-    case "terminal.command.finished":
-      return `\uC885\uB8CC ${p.exitCode ?? ""}`;
-    case "turn.ended":
-      return `\uD134 \uC885\uB8CC${p.agentKind ? ` (${p.agentKind})` : ""}${p.command ? ` \u2014 ${p.command}` : ""}`;
-    case "view.activated":
-      return `\uBDF0 \uD65C\uC131\uD654 ${p.viewId}`;
-    // 오케스트레이터 대화 세트(parentId 상관) — 사이드바는 flat 이므로 세트 구성원은
-    // isSetMember 들여쓰기 마커로 묶임을 보인다. tts 는 어느 쪽에도 없다(자동 침묵).
-    case "chat.prompt":
-      return `\u{1F4AC} ${p.text ?? ""}`;
-    case "chat.answer":
-      return `\u21A9 ${p.text ?? ""}`;
-    case "boot.error":
-      return `\uCC3D \uBD80\uD305 \uC624\uB958 \u2014 ${p.msg ?? ""}`;
-    default:
-      return e.kind;
+  if (typeof p.durationMs === "number") {
+    const head = `${p.command} ${p.ok ? "\u2713" : `\u2717 ${p.code ?? ""}`} (${p.durationMs}ms)`;
+    return p.message ? `${head} \u2192 ${p.message}` : head;
   }
+  return typeof p.message === "string" && p.message ? p.message : e.kind;
 }
 function mediaOf(e) {
   const m = e.payload.media;
@@ -61,16 +40,9 @@ function actorOf(e, ko) {
   const l = ACTOR_LABELS[key];
   return l ? ko ? l.ko : l.en : key;
 }
-function ttsOf(e, ko) {
-  const t = e.payload.tts;
-  if (typeof t === "string" && t.trim()) return t.trim();
-  if (t !== true) return null;
-  if (e.kind === "terminal.command.finished") {
-    const code = typeof e.payload.exitCode === "number" ? e.payload.exitCode : null;
-    if (code === 0 || code == null) return ko ? "\uD130\uBBF8\uB110 \uBA85\uB839\uC774 \uB05D\uB0AC\uC5B4\uC694." : "A terminal command finished.";
-    return ko ? `\uBA85\uB839\uC774 \uC2E4\uD328\uD588\uC5B4\uC694. \uCF54\uB4DC ${code}.` : `A command failed with code ${code}.`;
-  }
-  return lineOf(e);
+function speakOf(e) {
+  const own = e.payload.speak;
+  return typeof own === "string" && own.trim() ? own.trim() : null;
 }
 
 // src/main.ts
@@ -162,7 +134,7 @@ var main_default = {
     };
     const narrate = (e) => {
       if (!mascotOn() || !cursorReady || !isNarrator) return;
-      const text = ttsOf(e, ko);
+      const text = speakOf(e);
       if (!text) return;
       if (!advanceCursor(e.seq)) return;
       narrated.add(e.seq);
@@ -173,7 +145,7 @@ var main_default = {
         }
       });
     };
-    const unreadEntries = () => buf.filter((e) => e.seq > cursor && ttsOf(e, ko) !== null);
+    const unreadEntries = () => buf.filter((e) => e.seq > cursor && speakOf(e) !== null);
     const drainUnread = () => {
       if (!mascotOn() || !cursorReady || !isNarrator) return;
       const u = unreadEntries();
@@ -371,7 +343,7 @@ var main_default = {
       description: "List buffered activity entries (same hub stream the orchestrator shows). narrated marks entries actually spoken.",
       triggers: { ko: "\uD65C\uB3D9 \uB85C\uADF8 \uBAA9\uB85D \uC870\uD68C" },
       params: { limit: { type: "number", description: "max entries (default 20)", required: false } },
-      returns: "{ ok, cursor, unreadCount, entries: [{seq, ts, kind, text, tts, narrated, unread}] }",
+      returns: "{ ok, cursor, unreadCount, entries: [{seq, ts, kind, text, speak, narrated, unread}] }",
       message: (d) => `\uD65C\uB3D9 ${(d.entries ?? []).length}\uAC1C (\uC548 \uC77D\uC74C ${d.unreadCount ?? 0}\uAC1C).`,
       handler: (p) => {
         const limit = typeof p.limit === "number" ? Math.max(1, p.limit) : 20;
@@ -386,9 +358,9 @@ var main_default = {
             ts: e.ts,
             kind: e.kind,
             text: lineOf(e),
-            tts: ttsOf(e, ko),
+            speak: speakOf(e),
             narrated: narrated.has(e.seq),
-            unread: e.seq > cursor && ttsOf(e, ko) !== null
+            unread: e.seq > cursor && speakOf(e) !== null
           }))
         };
       }

@@ -1,6 +1,6 @@
 // 피드 순수부 테스트 — 버퍼 규율(중복·정렬·상한)과 낭독 스펙 준수.
 import { describe, expect, it } from "vitest";
-import { actorOf, BUFFER_CAP, insertEntry, isSetMember, lineOf, ttsOf, type ActivityEntry } from "./feed";
+import { actorOf, BUFFER_CAP, insertEntry, isSetMember, lineOf, speakOf, type ActivityEntry } from "./feed";
 
 const e = (seq: number, kind = "command.executed", payload: Record<string, unknown> = {}): ActivityEntry => ({
   seq,
@@ -32,33 +32,30 @@ describe("insertEntry", () => {
   });
 });
 
-describe("ttsOf — 낭독 스펙 준수", () => {
-  it("payload.tts 문자열 = 그대로 낭독", () => {
-    expect(ttsOf(e(1, "command.executed", { tts: "완료했어요" }), true)).toBe("완료했어요");
+describe("speakOf — 산출자 소유 낭독(§3, kind 무지)", () => {
+  it("payload.speak 문자열 = 그대로 낭독", () => {
+    expect(speakOf(e(1, "command.executed", { speak: "완료했어요" }))).toBe("완료했어요");
+    expect(speakOf(e(2, "terminal.command.finished", { speak: "터미널 명령이 끝났어요." }))).toBe(
+      "터미널 명령이 끝났어요.",
+    );
   });
-  it("payload.tts 없음/false = 침묵 (turn.ended 포함)", () => {
-    expect(ttsOf(e(1, "turn.ended", {}), true)).toBeNull();
-    expect(ttsOf(e(2, "command.executed", { message: "m" }), true)).toBeNull();
-    expect(ttsOf(e(3, "command.executed", { tts: false }), true)).toBeNull();
-  });
-  it("terminal.finished tts:true = 종료코드 문장 합성", () => {
-    expect(ttsOf(e(1, "terminal.command.finished", { tts: true, exitCode: 0 }), true)).toContain("끝났어요");
-    expect(ttsOf(e(2, "terminal.command.finished", { tts: true, exitCode: 2 }), true)).toContain("코드 2");
+  it("payload.speak 없음/빈문자열 = 침묵 — 낭독자는 합성하지 않는다", () => {
+    expect(speakOf(e(1, "turn.ended", {}))).toBeNull();
+    expect(speakOf(e(2, "command.executed", { message: "m" }))).toBeNull();
+    expect(speakOf(e(3, "terminal.command.finished", { exitCode: 2 }))).toBeNull();
+    expect(speakOf(e(4, "command.executed", { speak: "  " }))).toBeNull();
   });
 });
 
-describe("lineOf", () => {
-  it("command.executed 는 오케스트레이터와 동형 요약", () => {
+describe("lineOf — 자기기술(kind 무지)", () => {
+  it("명령 트레이스(durationMs)는 generic 프레이밍", () => {
     const line = lineOf(e(1, "command.executed", { command: "x", ok: true, durationMs: 3, message: "done" }));
     expect(line).toBe("x ✓ (3ms) → done");
   });
-  it("대화 세트(chat.*) — 질문·답변을 표시하되 tts 는 없다(자동 침묵)", () => {
-    const prompt = e(1, "chat.prompt", { text: "창 알려줘", turnId: "t1" });
-    const answer = e(2, "chat.answer", { text: "3개 열려 있어요", parentId: "t1" });
-    expect(lineOf(prompt)).toBe("💬 창 알려줘");
-    expect(lineOf(answer)).toBe("↩ 3개 열려 있어요");
-    expect(ttsOf(prompt, true)).toBeNull();
-    expect(ttsOf(answer, true)).toBeNull();
+  it("그 외는 산출자 message 그대로 — 없으면 kind", () => {
+    expect(lineOf(e(1, "chat.prompt", { text: "창 알려줘", message: "💬 창 알려줘" }))).toBe("💬 창 알려줘");
+    expect(lineOf(e(2, "terminal.command.finished", { exitCode: 0, message: "종료 0" }))).toBe("종료 0");
+    expect(lineOf(e(3, "some.kind", {}))).toBe("some.kind");
   });
 });
 

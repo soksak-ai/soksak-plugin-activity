@@ -1,6 +1,7 @@
 // 피드 순수부 — 엔트리 버퍼(seq 중복 제거·정렬)와 표시 라인/낭독 문장 도출.
-// 원칙(MESSAGE-PROTOCOL 낭독 스펙): payload.tts 가 있는 엔트리만 읽는다. 문자열=그 문장,
-// true=종류별 로컬라이즈 합성. 소비자는 자체 읽기/건너뛰기 규칙을 만들지 않는다.
+// 낭독 규칙(MESSAGE-PROTOCOL §3): 명령 실행은 payload.speak(명령 소유 문장)을 그대로 읽고,
+// 이벤트(터미널 종료 등)는 낭독자가 kind 별로 자기 i18n 으로 문장을 구성한다. payload.speak 도
+// 없고 kind 낭독도 없으면 침묵.
 export interface ActivityEntry {
   seq: number;
   ts: number;
@@ -20,35 +21,16 @@ export function insertEntry(buf: ActivityEntry[], e: ActivityEntry): boolean {
   return true;
 }
 
-/** 표시 한 줄 — 오케스트레이터 lineOf 와 동형(같은 스트림이 같은 문장으로 보이게). */
+/** 표시 한 줄 — 자기기술 엔트리(MESSAGE-PROTOCOL §3), 오케스트레이터 lineOf 와 동일 규칙.
+ *  소비자는 kind 를 열거하지 않는다: 명령 트레이스(durationMs 보유)면 generic 프레이밍(도메인
+ *  무지), 그 외는 산출자가 실은 message. 산출자가 자기 i18n 으로 문장을 소유한다. */
 export function lineOf(e: ActivityEntry): string {
   const p = e.payload;
-  switch (e.kind) {
-    case "command.executed": {
-      const head = `${p.command} ${p.ok ? "✓" : `✗ ${p.code ?? ""}`} (${p.durationMs}ms)`;
-      return p.message ? `${head} → ${p.message}` : head;
-    }
-    case "command.progress":
-      return `⋯ ${p.command ? `${p.command}: ` : ""}${p.delta ?? ""}`;
-    case "terminal.command.started":
-      return `$ ${p.commandLine}`;
-    case "terminal.command.finished":
-      return `종료 ${p.exitCode ?? ""}`;
-    case "turn.ended":
-      return `턴 종료${p.agentKind ? ` (${p.agentKind})` : ""}${p.command ? ` — ${p.command}` : ""}`;
-    case "view.activated":
-      return `뷰 활성화 ${p.viewId}`;
-    // 오케스트레이터 대화 세트(parentId 상관) — 사이드바는 flat 이므로 세트 구성원은
-    // isSetMember 들여쓰기 마커로 묶임을 보인다. tts 는 어느 쪽에도 없다(자동 침묵).
-    case "chat.prompt":
-      return `💬 ${p.text ?? ""}`;
-    case "chat.answer":
-      return `↩ ${p.text ?? ""}`;
-    case "boot.error":
-      return `창 부팅 오류 — ${(p as { msg?: string }).msg ?? ""}`;
-    default:
-      return e.kind;
+  if (typeof p.durationMs === "number") {
+    const head = `${p.command} ${p.ok ? "✓" : `✗ ${p.code ?? ""}`} (${p.durationMs}ms)`;
+    return p.message ? `${head} → ${p.message}` : head;
   }
+  return typeof p.message === "string" && p.message ? p.message : e.kind;
 }
 
 /** 응답이 선언한 표시 미디어(MESSAGE-PROTOCOL) — 이미지는 이미지로(오케스트레이터 동형). */
@@ -85,16 +67,9 @@ export function actorOf(e: ActivityEntry, ko: boolean): string {
   return l ? (ko ? l.ko : l.en) : key;
 }
 
-/** 낭독 문장 — payload.tts 문자열은 그대로, true 는 종류별 합성, 그 외 null(침묵). */
-export function ttsOf(e: ActivityEntry, ko: boolean): string | null {
-  const t = e.payload.tts;
-  if (typeof t === "string" && t.trim()) return t.trim();
-  if (t !== true) return null;
-  if (e.kind === "terminal.command.finished") {
-    const code = typeof e.payload.exitCode === "number" ? e.payload.exitCode : null;
-    if (code === 0 || code == null) return ko ? "터미널 명령이 끝났어요." : "A terminal command finished.";
-    return ko ? `명령이 실패했어요. 코드 ${code}.` : `A command failed with code ${code}.`;
-  }
-  // tts:true 인데 전용 합성이 없는 종류 — 표시 라인을 그대로 읽는다(스펙: 낭독 대상임은 확실).
-  return lineOf(e);
+/** 낭독 문장 — 산출자가 자기 i18n 으로 실은 payload.speak 를 그대로 읽는다(명령·이벤트·플러그인
+ *  균일, MESSAGE-PROTOCOL §3). 낭독자는 kind 를 열거하거나 문장을 합성하지 않는다. 없으면 침묵. */
+export function speakOf(e: ActivityEntry): string | null {
+  const own = e.payload.speak;
+  return typeof own === "string" && own.trim() ? own.trim() : null;
 }

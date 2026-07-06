@@ -1,13 +1,13 @@
 // soksak-plugin-activity — 프로젝트 창 사이드바의 활동로그(허브 전체 스트림) + mascot 낭독.
 // 데이터: 백필 activity.recent 1회 + 라이브 app.events.on("activity") — 폴링 0, 필터 없음
 // (오케스트레이터 피드와 동일 내용이 수용 기준).
-// 낭독 규율: payload.tts 스펙 준수 + 읽음 커서(kv 공유) + 낭독자 선출(단일 목소리).
+// 낭독 규율: payload.speak 규칙 준수 + 읽음 커서(kv 공유) + 낭독자 선출(단일 목소리).
 //   여러 프로젝트 창 중 "마지막으로 포커스된 창"이 낭독자(kv 클레임) — 오케스트레이터/타 앱으로
 //   포커스가 가도 낭독자는 유지된다(오케스트레이터 창은 설계상 플러그인이 없다 — P13 셸).
 //   낭독 자격 = 낭독자 OR 타겟된 창(엔트리가 이 창에서 발생 — relay ownWindow). 자격 없는
 //   도착분은 "안 읽음" 적립, 낭독자가 되면 소화하되 백로그 3개 초과면 마지막 3개만 읽고
-//   전체 읽음 처리(커서 일괄 전진 — 밀린 독백 방지). say 는 spec tts:false 라 되먹임 불가.
-import { actorOf, BUFFER_CAP, insertEntry, isSetMember, lineOf, mediaOf, ttsOf, type ActivityEntry } from "./feed";
+//   전체 읽음 처리(커서 일괄 전진 — 밀린 독백 방지). say 는 spec speak:"" 라 되먹임 불가.
+import { actorOf, BUFFER_CAP, insertEntry, isSetMember, lineOf, mediaOf, speakOf, type ActivityEntry } from "./feed";
 
 interface Disposable {
   dispose(): void;
@@ -147,14 +147,14 @@ export default {
       for (const l of viewListeners) l.append(e);
     };
 
-    // 낭독 — 스펙 준수 + 읽음 커서 + 단일 낭독자: tts 문장이 있고 커서를 전진시킨 엔트리만 say.
+    // 낭독 — 스펙 준수 + 읽음 커서 + 단일 낭독자: 낭독 문장이 있고 커서를 전진시킨 엔트리만 say.
     // (커서 이하 = 이미 읽음(이 창/다른 창/이전 세션) — 침묵. 몰아읽기·중복 낭독 원천 차단.)
     // 목소리는 항상 하나 — narrator 만 읽는다. 과거의 "발생 창 병행 낭독권"은 크로스창 턴
     // (오케스트레이터)에서 narrator 와 발생 창이 동시 발화하는 레이스를 만들어 폐지(실측).
     // 활성창 규칙은 포커스 시 narrator 클레임이 담당한다(작업 창 = 낭독 창).
     const narrate = (e: ActivityEntry) => {
       if (!mascotOn() || !cursorReady || !isNarrator) return;
-      const text = ttsOf(e, ko);
+      const text = speakOf(e);
       if (!text) return;
       if (!advanceCursor(e.seq)) return;
       narrated.add(e.seq);
@@ -166,8 +166,8 @@ export default {
       });
     };
 
-    /** 안 읽은 tts 엔트리(커서 초과) — 표시·배지·포커스 획득 시 소화 대상. */
-    const unreadEntries = () => buf.filter((e) => e.seq > cursor && ttsOf(e, ko) !== null);
+    /** 안 읽은 낭독 엔트리(커서 초과) — 표시·배지·포커스 획득 시 소화 대상. */
+    const unreadEntries = () => buf.filter((e) => e.seq > cursor && speakOf(e) !== null);
 
     /** 밀린 안 읽음 소화 — 낭독자 획득/mascot 켬 시. 3개 초과 백로그는 마지막 3개만 읽고
      *  나머지는 커서 일괄 전진으로 읽음 처리(몰아 읽기 독백 방지 — 사용자 규칙). */
@@ -409,7 +409,7 @@ export default {
         "List buffered activity entries (same hub stream the orchestrator shows). narrated marks entries actually spoken.",
       triggers: { ko: "활동 로그 목록 조회" },
       params: { limit: { type: "number", description: "max entries (default 20)", required: false } },
-      returns: "{ ok, cursor, unreadCount, entries: [{seq, ts, kind, text, tts, narrated, unread}] }",
+      returns: "{ ok, cursor, unreadCount, entries: [{seq, ts, kind, text, speak, narrated, unread}] }",
       message: (d: any) => `활동 ${(d.entries ?? []).length}개 (안 읽음 ${d.unreadCount ?? 0}개).`,
       handler: (p: Record<string, unknown>) => {
         const limit = typeof p.limit === "number" ? Math.max(1, p.limit) : 20;
@@ -424,9 +424,9 @@ export default {
             ts: e.ts,
             kind: e.kind,
             text: lineOf(e),
-            tts: ttsOf(e, ko),
+            speak: speakOf(e),
             narrated: narrated.has(e.seq),
-            unread: e.seq > cursor && ttsOf(e, ko) !== null,
+            unread: e.seq > cursor && speakOf(e) !== null,
           })),
         };
       },
