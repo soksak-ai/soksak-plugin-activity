@@ -345,6 +345,20 @@ var main_default = {
       params: { limit: { type: "number", description: "max entries (default 20)", required: false } },
       returns: "{ ok, cursor, unreadCount, entries: [{seq, ts, kind, text, speak, narrated, unread}] }",
       message: (d) => `\uD65C\uB3D9 ${(d.entries ?? []).length}\uAC1C (\uC548 \uC77D\uC74C ${d.unreadCount ?? 0}\uAC1C).`,
+      // 낭독이 꺼져있고 밀린 항목이 있을 때만 제시 — 이미 듣고 있으면 불필요한 제안이다.
+      hint: (d) => {
+        const unreadCount = typeof d.unreadCount === "number" ? d.unreadCount : 0;
+        const me = d.me;
+        if (unreadCount > 0 && me?.mascot === false) {
+          return [
+            {
+              cmd: "plugin.soksak-plugin-activity.mascot.toggle",
+              why: "\uB0AD\uB3C5\uC744 \uCF1C\uBA74 \uBC00\uB9B0 \uD65C\uB3D9\uC744 \uB4E4\uC744 \uC218 \uC788\uC2B5\uB2C8\uB2E4"
+            }
+          ];
+        }
+        return [];
+      },
       handler: (p) => {
         const limit = typeof p.limit === "number" ? Math.max(1, p.limit) : 20;
         return {
@@ -372,6 +386,13 @@ var main_default = {
       triggers: { ko: "\uBE0C\uC774\uD29C\uBE0C \uB0AD\uB3C5 \uB9C8\uC2A4\uCF54\uD2B8 \uCF1C\uAE30 \uB044\uAE30" },
       message: (d) => d.mascot ? "\uB0AD\uB3C5\uC744 \uCF30\uC2B5\uB2C8\uB2E4." : "\uB0AD\uB3C5\uC744 \uAED0\uC2B5\uB2C8\uB2E4.",
       params: { on: { type: "boolean", description: "explicit state; omit to flip", required: false } },
+      // 켬 직후에만 제시 — 지금부터 무엇이 읽힐지 list 로 확인할 수 있다. 끔은 후속이 없다.
+      hint: (d) => d.mascot ? [
+        {
+          cmd: "plugin.soksak-plugin-activity.list",
+          why: "\uC9C0\uAE08\uAE4C\uC9C0\uC758 \uD65C\uB3D9 \uB85C\uADF8\uB97C \uD655\uC778\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4"
+        }
+      ] : [],
       handler: async (p) => {
         const next = typeof p.on === "boolean" ? p.on : !mascotOn();
         mascot = next;

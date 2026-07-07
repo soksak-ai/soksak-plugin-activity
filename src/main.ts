@@ -25,7 +25,15 @@ interface HostApp {
     ): Disposable;
   };
   commands: {
-    register(name: string, spec: Record<string, unknown> & { handler: Function }): Disposable;
+    register(
+      name: string,
+      spec: Record<string, unknown> & {
+        handler: Function;
+        // 후속 명령 제시(코어 동형, docs/MESSAGE-PROTOCOL.md) — 실행 결과 data 를 받아 다음 수를
+        // 제안한다(지시 아님). 상한 3 — 넘겨도 execute 가 자른다.
+        hint?: (data: Record<string, unknown>, ctx: Record<string, unknown>) => Array<{ cmd: string; why: string }>;
+      },
+    ): Disposable;
     // opts.origin — 자동 행위의 자기 선언(§5): 기록은 되고 노출(흐림·무낭독)만 낮아진다.
     execute(name: string, params?: Record<string, unknown>, opts?: { origin?: string }): Promise<any>;
   };
@@ -394,8 +402,13 @@ export default {
     );
 
     // ── 커맨드 ──
-    const reg = (name: string, spec: Record<string, unknown> & { handler: Function }) =>
-      ctx.subscriptions.push(app.commands.register(name, spec));
+    const reg = (
+      name: string,
+      spec: Record<string, unknown> & {
+        handler: Function;
+        hint?: (data: Record<string, unknown>, ctx: Record<string, unknown>) => Array<{ cmd: string; why: string }>;
+      },
+    ) => ctx.subscriptions.push(app.commands.register(name, spec));
 
     reg("ping", {
       description: "Health check — plugin load/version probe (E2E).",
@@ -411,6 +424,20 @@ export default {
       params: { limit: { type: "number", description: "max entries (default 20)", required: false } },
       returns: "{ ok, cursor, unreadCount, entries: [{seq, ts, kind, text, speak, narrated, unread}] }",
       message: (d: any) => `활동 ${(d.entries ?? []).length}개 (안 읽음 ${d.unreadCount ?? 0}개).`,
+      // 낭독이 꺼져있고 밀린 항목이 있을 때만 제시 — 이미 듣고 있으면 불필요한 제안이다.
+      hint: (d: Record<string, unknown>) => {
+        const unreadCount = typeof d.unreadCount === "number" ? d.unreadCount : 0;
+        const me = d.me as { mascot?: boolean } | undefined;
+        if (unreadCount > 0 && me?.mascot === false) {
+          return [
+            {
+              cmd: "plugin.soksak-plugin-activity.mascot.toggle",
+              why: "낭독을 켜면 밀린 활동을 들을 수 있습니다",
+            },
+          ];
+        }
+        return [];
+      },
       handler: (p: Record<string, unknown>) => {
         const limit = typeof p.limit === "number" ? Math.max(1, p.limit) : 20;
         return {
@@ -438,6 +465,16 @@ export default {
       triggers: { ko: "브이튜브 낭독 마스코트 켜기 끄기" },
       message: (d: any) => (d.mascot ? "낭독을 켰습니다." : "낭독을 껐습니다."),
       params: { on: { type: "boolean", description: "explicit state; omit to flip", required: false } },
+      // 켬 직후에만 제시 — 지금부터 무엇이 읽힐지 list 로 확인할 수 있다. 끔은 후속이 없다.
+      hint: (d: Record<string, unknown>) =>
+        d.mascot
+          ? [
+              {
+                cmd: "plugin.soksak-plugin-activity.list",
+                why: "지금까지의 활동 로그를 확인할 수 있습니다",
+              },
+            ]
+          : [],
       handler: async (p: Record<string, unknown>) => {
         const next = typeof p.on === "boolean" ? p.on : !mascotOn();
         mascot = next; // 이 창 즉시 확정 — 타 창은 kv watch 로 따라온다
