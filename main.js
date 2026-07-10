@@ -255,6 +255,7 @@ var main_default = {
           bar.className = "al-bar";
           const toggle = document.createElement("button");
           toggle.className = "al-btn";
+          toggle.dataset.node = "mascot-toggle";
           bar.appendChild(toggle);
           const log = document.createElement("div");
           log.className = "al-log";

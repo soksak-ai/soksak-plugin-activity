@@ -310,6 +310,7 @@ export default {
           bar.className = "al-bar";
           const toggle = document.createElement("button");
           toggle.className = "al-btn";
+          toggle.dataset.node = "mascot-toggle"; // 구조적 주소(단일 조작 요소) — ui.tree / ui.input.click
           bar.appendChild(toggle);
           const log = document.createElement("div");
           log.className = "al-log";

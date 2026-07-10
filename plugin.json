@@ -60,6 +60,12 @@
           "ko": "캐릭터 낭독을 켜고 끕니다"
         }
       }
+    ],
+    "nodes": [
+      {
+        "id": "mascot-toggle",
+        "description": "Narration on/off button in the view bar (click flips mascot narration). data-node=\"mascot-toggle\"."
+      }
     ]
   }
 }
