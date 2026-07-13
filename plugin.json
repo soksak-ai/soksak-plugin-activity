@@ -20,7 +20,10 @@
     "fs:read"
   ],
   "consumes": [
-    "soksak-narration-spec@1"
+    {
+      "id": "soksak-spec-plugin-narration",
+      "range": "0.0.1"
+    }
   ],
   "contributes": {
     "views": [

@@ -46,7 +46,7 @@ function speakOf(e) {
 }
 
 // src/main.ts
-var NARRATION_CONTRACT = "soksak-narration-spec@1";
+var NARRATION_CONTRACT = "soksak-spec-plugin-narration";
 function narratorIdOf(v) {
   if (typeof v === "string") return v;
   if (v && typeof v === "object" && typeof v.id === "string") return v.id;

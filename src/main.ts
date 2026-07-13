@@ -54,9 +54,9 @@ interface PluginCtx {
   subscriptions: Array<Disposable | (() => void)>;
 }
 
-// 낭독 계약 — 표현 엔진을 이름이 아니라 계약으로 발견한다(soksak-narration-spec@1).
+// 낭독 계약 — 표현 엔진을 이름이 아니라 계약으로 발견한다(soksak-spec-plugin-narration).
 // mascot 이든 순수 TTS 엔진이든, 소비자는 누가 표현하는지 모른 채 세 동사를 부른다.
-const NARRATION_CONTRACT = "soksak-narration-spec@1";
+const NARRATION_CONTRACT = "soksak-spec-plugin-narration";
 
 // 낭독자 kv 판독 — 신형 {id, window} / 구형 string(id) 겸용.
 function narratorIdOf(v: unknown): string | null {
