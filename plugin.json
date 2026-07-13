@@ -19,9 +19,9 @@
     "terminal",
     "fs:read"
   ],
-  "dependencies": {
-    "soksak-plugin-mascot": "^1.0.0"
-  },
+  "consumes": [
+    "soksak-narration-spec@1"
+  ],
   "contributes": {
     "views": [
       {

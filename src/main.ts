@@ -54,7 +54,9 @@ interface PluginCtx {
   subscriptions: Array<Disposable | (() => void)>;
 }
 
-const VT = "plugin.soksak-plugin-mascot.";
+// 낭독 계약 — 표현 엔진을 이름이 아니라 계약으로 발견한다(soksak-narration-spec@1).
+// mascot 이든 순수 TTS 엔진이든, 소비자는 누가 표현하는지 모른 채 세 동사를 부른다.
+const NARRATION_CONTRACT = "soksak-narration-spec@1";
 
 // 낭독자 kv 판독 — 신형 {id, window} / 구형 string(id) 겸용.
 function narratorIdOf(v: unknown): string | null {
@@ -77,6 +79,34 @@ export default {
     const narrated = new Set<number>(); // seq — list 커맨드/검증용(이 창이 읽은 것)
     const viewListeners = new Set<{ refresh: () => void; append: (e: ActivityEntry) => void }>();
     let mascotWarned = false;
+
+    // 낭독 엔진 발견 — 계약을 구현한다고 선언한 활성 플러그인을 이름 없이 찾는다. 세션 내 캐시하되
+    // 엔진이 사라지거나 갈아끼워지면 다음 호출에서 재해소한다(구현체 무차별). 없으면 null — 그건
+    // 에러가 아니라 조용한 폴백이다(계약: fire-and-forget). 소비자는 응답을 안 기다리고 안 읽는다.
+    let narratorEngine: string | null = null;
+    const resolveEngine = async (): Promise<string | null> => {
+      if (narratorEngine) return narratorEngine;
+      try {
+        const out: any = await app.commands.execute("plugin.implementers", { contract: NARRATION_CONTRACT });
+        const found = (out?.data?.implementers || []).find((i: any) => i.status === "enabled");
+        narratorEngine = found ? found.id : null;
+      } catch {
+        narratorEngine = null;
+      }
+      return narratorEngine;
+    };
+    // 계약 세 동사를 발견된 엔진으로 태운다. fire-and-forget: 절대 await 하지 않고 결과를 읽지 않는다.
+    // 실패·부재는 조용히 넘긴다(호출자가 원하면 onFail 로 한 번만 고지). 엔진이 죽었으면 캐시를 비워
+    // 다음 호출이 재발견하게 한다.
+    const narration = (verb: "say" | "toggle" | "release", params: Record<string, unknown> = {}, onFail?: (e: unknown) => void) => {
+      void resolveEngine().then((id) => {
+        if (!id) return; // 표현 엔진 없음 — 텍스트 모드로 계속(조용한 폴백)
+        void app.commands.execute(`plugin.${id}.${verb}`, params, { origin: "internal" }).catch((err) => {
+          narratorEngine = null; // 죽었을 수 있다 — 다음 호출이 재발견
+          onFail?.(err);
+        });
+      });
+    };
     // 읽음 커서(watermark) — "어디까지 읽었는지"의 단일 진실. kv 영속 + 창 간 공유(watch)로
     // 리로드/다중 창에서 같은 엔트리를 중복 낭독하지 않는다. 커서 이하 seq 는 절대 읽지 않는다.
     const CURSOR_KEY = "narratedSeq";
@@ -104,7 +134,7 @@ export default {
               isNarrator = narratorIdOf(v) === myId; // 다른 창이 클레임 — 즉시 양보(단일 목소리)
               // 자격 상실 = 엔진 반납(규칙: 엔진의 생존은 발화 자격과 함께 간다 — 모델 상주
               // 프로세스가 창마다 남아 메모리를 먹던 원천). 다음 자격 창이 lazy 재기동.
-              if (was && !isNarrator) void app.commands.execute(VT + "release", {}, { origin: "internal" }).catch(() => {});
+              if (was && !isNarrator) narration("release");
               if (was !== isNarrator) syncMascot(); // 자격 이동 = 마스코트 표시도 이동
             });
           } else if (key === MASCOT_KEY) {
@@ -112,7 +142,7 @@ export default {
               mascot = v !== false;
               syncMascot();
               if (mascot) drainUnread();
-              else void app.commands.execute(VT + "release", {}, { origin: "internal" }).catch(() => {}); // 끔 = 자격 반납
+              else narration("release"); // 끔 = 자격 반납
               notify();
             });
           }
@@ -166,10 +196,10 @@ export default {
       if (!text) return;
       if (!advanceCursor(e.seq)) return;
       narrated.add(e.seq);
-      void app.commands.execute(VT + "say", { text }, { origin: "internal" }).catch((err) => {
+      narration("say", { text }, (err) => {
         if (!mascotWarned) {
           mascotWarned = true;
-          console.warn("[activity] mascot say 실패 — 텍스트 모드로 계속:", err);
+          console.warn("[activity] narration say 실패 — 텍스트 모드로 계속:", err);
         }
       });
     };
@@ -258,7 +288,7 @@ export default {
     // Live2D 를 상시 렌더하면 창당 CPU ~3%p(실측, rAF+매 프레임 스타일 갱신)가 배가된다 —
     // 목소리가 하나면 얼굴도 하나. 자격 이동(narrator kv)이 표시도 함께 옮긴다.
     const syncMascot = () => {
-      void app.commands.execute(VT + "toggle", { on: mascotOn() && isNarrator }, { origin: "internal" }).catch(() => {});
+      narration("toggle", { on: mascotOn() && isNarrator });
     };
     syncMascot();
 
@@ -482,7 +512,7 @@ export default {
         // 토글이 실행된 창 = 명시적 사용자 의도 → 낭독자 클레임(리로드로 고아가 된 클레임도 회복)
         claimNarrator();
         await app.data?.kv.set(MASCOT_KEY, next).catch(() => {});
-        await app.commands.execute(VT + "toggle", { on: next }).catch(() => {});
+        narration("toggle", { on: next }); // 표현면 토글은 fire-and-forget — 엔진 응답을 기다리지 않는다
         if (next) drainUnread();
         notify();
         return { ok: true, mascot: next };

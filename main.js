@@ -46,7 +46,7 @@ function speakOf(e) {
 }
 
 // src/main.ts
-var VT = "plugin.soksak-plugin-mascot.";
+var NARRATION_CONTRACT = "soksak-narration-spec@1";
 function narratorIdOf(v) {
   if (typeof v === "string") return v;
   if (v && typeof v === "object" && typeof v.id === "string") return v.id;
@@ -66,6 +66,27 @@ var main_default = {
     const narrated = /* @__PURE__ */ new Set();
     const viewListeners = /* @__PURE__ */ new Set();
     let mascotWarned = false;
+    let narratorEngine = null;
+    const resolveEngine = async () => {
+      if (narratorEngine) return narratorEngine;
+      try {
+        const out = await app.commands.execute("plugin.implementers", { contract: NARRATION_CONTRACT });
+        const found = (out?.data?.implementers || []).find((i) => i.status === "enabled");
+        narratorEngine = found ? found.id : null;
+      } catch {
+        narratorEngine = null;
+      }
+      return narratorEngine;
+    };
+    const narration = (verb, params = {}, onFail) => {
+      void resolveEngine().then((id) => {
+        if (!id) return;
+        void app.commands.execute(`plugin.${id}.${verb}`, params, { origin: "internal" }).catch((err) => {
+          narratorEngine = null;
+          onFail?.(err);
+        });
+      });
+    };
     const CURSOR_KEY = "narratedSeq";
     let cursor = -1;
     let cursorReady = false;
@@ -86,8 +107,7 @@ var main_default = {
             void app.data.kv.get(NARRATOR_KEY).then((v) => {
               const was = isNarrator;
               isNarrator = narratorIdOf(v) === myId;
-              if (was && !isNarrator) void app.commands.execute(VT + "release", {}, { origin: "internal" }).catch(() => {
-              });
+              if (was && !isNarrator) narration("release");
               if (was !== isNarrator) syncMascot();
             });
           } else if (key === MASCOT_KEY) {
@@ -95,8 +115,7 @@ var main_default = {
               mascot = v !== false;
               syncMascot();
               if (mascot) drainUnread();
-              else void app.commands.execute(VT + "release", {}, { origin: "internal" }).catch(() => {
-              });
+              else narration("release");
               notify();
             });
           }
@@ -138,10 +157,10 @@ var main_default = {
       if (!text) return;
       if (!advanceCursor(e.seq)) return;
       narrated.add(e.seq);
-      void app.commands.execute(VT + "say", { text }, { origin: "internal" }).catch((err) => {
+      narration("say", { text }, (err) => {
         if (!mascotWarned) {
           mascotWarned = true;
-          console.warn("[activity] mascot say \uC2E4\uD328 \u2014 \uD14D\uC2A4\uD2B8 \uBAA8\uB4DC\uB85C \uACC4\uC18D:", err);
+          console.warn("[activity] narration say \uC2E4\uD328 \u2014 \uD14D\uC2A4\uD2B8 \uBAA8\uB4DC\uB85C \uACC4\uC18D:", err);
         }
       });
     };
@@ -204,8 +223,7 @@ var main_default = {
       })
     );
     const syncMascot = () => {
-      void app.commands.execute(VT + "toggle", { on: mascotOn() && isNarrator }, { origin: "internal" }).catch(() => {
-      });
+      narration("toggle", { on: mascotOn() && isNarrator });
     };
     syncMascot();
     ctx.subscriptions.push(
@@ -400,8 +418,7 @@ var main_default = {
         claimNarrator();
         await app.data?.kv.set(MASCOT_KEY, next).catch(() => {
         });
-        await app.commands.execute(VT + "toggle", { on: next }).catch(() => {
-        });
+        narration("toggle", { on: next });
         if (next) drainUnread();
         notify();
         return { ok: true, mascot: next };
