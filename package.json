@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.0.1",
   "type": "module",
-  "description": "soksak 활동로그 플러그인 — 허브 스트림 사이드바 + vtube 낭독",
+  "description": "soksak \ud65c\ub3d9\ub85c\uadf8 \ud50c\ub7ec\uadf8\uc778 \u2014 \ud5c8\ube0c \uc2a4\ud2b8\ub9bc \uc0ac\uc774\ub4dc\ubc14 + vtube \ub0ad\ub3c5",
   "scripts": {
     "build": "node build.mjs",
     "test": "vitest run",
@@ -16,5 +16,11 @@
     "esbuild": "^0.24.2",
     "typescript": "~5.9.3",
     "vitest": "^2.1.8"
+  },
+  "soksakRelease": {
+    "kind": "plugin",
+    "id": "soksak-plugin-activity",
+    "repository": "https://github.com/soksak-ai/soksak-plugin-activity",
+    "manifest": "release.json"
   }
 }
