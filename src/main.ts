@@ -87,7 +87,7 @@ export default {
     const resolveEngine = async (): Promise<string | null> => {
       if (narratorEngine) return narratorEngine;
       try {
-        const out: any = await app.commands.execute("plugin.implementers", { contract: NARRATION_CONTRACT });
+        const out: any = await app.commands.execute("plugin.implementers", { id: NARRATION_CONTRACT });
         const found = (out?.data?.implementers || []).find((i: any) => i.status === "enabled");
         narratorEngine = found ? found.id : null;
       } catch {

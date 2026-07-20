@@ -70,7 +70,7 @@ var main_default = {
     const resolveEngine = async () => {
       if (narratorEngine) return narratorEngine;
       try {
-        const out = await app.commands.execute("plugin.implementers", { contract: NARRATION_CONTRACT });
+        const out = await app.commands.execute("plugin.implementers", { id: NARRATION_CONTRACT });
         const found = (out?.data?.implementers || []).find((i) => i.status === "enabled");
         narratorEngine = found ? found.id : null;
       } catch {
