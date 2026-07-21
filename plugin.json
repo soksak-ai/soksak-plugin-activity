@@ -34,10 +34,9 @@
         },
         "icon": "\ud83d\udcfb",
         "placements": [
-          "sidebar-left",
-          "sidebar-right"
+          "rail"
         ],
-        "defaultPlacement": "sidebar-left"
+        "defaultPlacement": "rail"
       }
     ],
     "commands": [
