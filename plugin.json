@@ -36,8 +36,7 @@
         "placements": [
           "rail"
         ],
-        "defaultPlacement": "rail",
-        "resident": true
+        "defaultPlacement": "rail"
       }
     ],
     "commands": [
