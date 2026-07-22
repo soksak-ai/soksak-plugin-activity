@@ -3,12 +3,12 @@
   "id": "soksak-plugin-activity",
   "name": {
     "en": "Activity",
-    "ko": "\ud65c\ub3d9"
+    "ko": "활동"
   },
   "version": "0.0.1",
   "description": {
-    "en": "The activity log in a project-window sidebar \u2014 the same hub stream the orchestrator feed shows. Entries whose spec carries tts are read aloud by the mascot (toggleable).",
-    "ko": "\ud504\ub85c\uc81d\ud2b8 \ucc3d \uc0ac\uc774\ub4dc\ubc14\uc758 \ud65c\ub3d9\ub85c\uadf8 \u2014 \uc624\ucf00\uc2a4\ud2b8\ub808\uc774\ud130 \ud53c\ub4dc\uc640 \ub3d9\uc77c\ud55c \ud5c8\ube0c \uc2a4\ud2b8\ub9bc. \uc2a4\ud399\uc5d0 tts\uac00 \uc2e4\ub9b0 \uc5d4\ud2b8\ub9ac\ub294 \ub9c8\uc2a4\ucf54\ud2b8\uac00 \uc18c\ub9ac \ub0b4\uc5b4 \uc77d\ub294\ub2e4(\ud1a0\uae00 \uac00\ub2a5)."
+    "en": "The activity log in a project-window sidebar — the same hub stream the orchestrator feed shows. Entries whose spec carries tts are read aloud by the mascot (toggleable).",
+    "ko": "프로젝트 창 사이드바의 활동로그 — 오케스트레이터 피드와 동일한 허브 스트림. 스펙에 tts가 실린 엔트리는 마스코트가 소리 내어 읽는다(토글 가능)."
   },
   "entry": "main.js",
   "permissions": [
@@ -30,13 +30,14 @@
         "id": "log",
         "title": {
           "en": "Activity",
-          "ko": "\ud65c\ub3d9"
+          "ko": "활동"
         },
-        "icon": "\ud83d\udcfb",
+        "icon": "📻",
         "placements": [
           "rail"
         ],
-        "defaultPlacement": "rail"
+        "defaultPlacement": "rail",
+        "resident": true
       }
     ],
     "commands": [
@@ -44,21 +45,21 @@
         "name": "ping",
         "title": {
           "en": "Pings the plugin",
-          "ko": "\ud50c\ub7ec\uadf8\uc778 \uc0c1\ud0dc\ub97c \uc810\uac80\ud569\ub2c8\ub2e4"
+          "ko": "플러그인 상태를 점검합니다"
         }
       },
       {
         "name": "list",
         "title": {
           "en": "Lists recent activity entries",
-          "ko": "\ucd5c\uadfc \ud65c\ub3d9 \uc5d4\ud2b8\ub9ac\ub97c \ub098\uc5f4\ud569\ub2c8\ub2e4"
+          "ko": "최근 활동 엔트리를 나열합니다"
         }
       },
       {
         "name": "mascot.toggle",
         "title": {
           "en": "Toggles character narration",
-          "ko": "\uce90\ub9ad\ud130 \ub0ad\ub3c5\uc744 \ucf1c\uace0 \ub055\ub2c8\ub2e4"
+          "ko": "캐릭터 낭독을 켜고 끕니다"
         }
       }
     ],
