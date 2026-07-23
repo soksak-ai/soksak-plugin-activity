@@ -303,7 +303,7 @@ export default {
           style.textContent = `
 :host { all: initial; }
 .al-root { position:absolute; inset:0; display:flex; flex-direction:column; font:12px/1.45 system-ui,sans-serif; color:#d8d8e0; }
-.al-bar { display:flex; gap:6px; padding:6px 8px; border-bottom:1px solid rgba(255,255,255,.08); align-items:center; }
+.al-bar { display:flex; gap:6px; height:var(--toolbar-h,28px); padding:0 var(--toolbar-pad-x,8px); border-bottom:1px solid rgba(255,255,255,.08); align-items:center; }
 .al-btn { padding:3px 9px; border-radius:7px; border:1px solid rgba(255,255,255,.14); background:rgba(255,255,255,.08); color:inherit; cursor:pointer; font:inherit; font-size:11px; }
 .al-log { flex:1; overflow-y:auto; padding:6px 8px; display:flex; flex-direction:column; gap:3px; }
 /* 스크롤바 — 코어 정본(App.css 4px)과 동일: 플러그인 뷰(Shadow DOM)엔 전역 규칙이 안 들어온다. */

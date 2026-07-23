@@ -236,7 +236,7 @@ var main_default = {
           style.textContent = `
 :host { all: initial; }
 .al-root { position:absolute; inset:0; display:flex; flex-direction:column; font:12px/1.45 system-ui,sans-serif; color:#d8d8e0; }
-.al-bar { display:flex; gap:6px; padding:6px 8px; border-bottom:1px solid rgba(255,255,255,.08); align-items:center; }
+.al-bar { display:flex; gap:6px; height:var(--toolbar-h,28px); padding:0 var(--toolbar-pad-x,8px); border-bottom:1px solid rgba(255,255,255,.08); align-items:center; }
 .al-btn { padding:3px 9px; border-radius:7px; border:1px solid rgba(255,255,255,.14); background:rgba(255,255,255,.08); color:inherit; cursor:pointer; font:inherit; font-size:11px; }
 .al-log { flex:1; overflow-y:auto; padding:6px 8px; display:flex; flex-direction:column; gap:3px; }
 /* \uC2A4\uD06C\uB864\uBC14 \u2014 \uCF54\uC5B4 \uC815\uBCF8(App.css 4px)\uACFC \uB3D9\uC77C: \uD50C\uB7EC\uADF8\uC778 \uBDF0(Shadow DOM)\uC5D4 \uC804\uC5ED \uADDC\uCE59\uC774 \uC548 \uB4E4\uC5B4\uC628\uB2E4. */
